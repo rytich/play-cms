@@ -13,7 +13,7 @@
 ## Global Constraints
 
 - TypeScriptはstrict modeで使用する。
-- Node.jsは22 LTS以上を対象にする。
+- Node.jsは22.13.0系または24以上を対象にする。
 - 単一リポジトリ・単一パッケージから開始する。
 - Filma APIキーは平文でDB、ログ、URLへ保存・出力しない。
 - Filma認証は`POST /filmaapi/token`へ`X-Api-Key`ヘッダーで送信する。
@@ -61,7 +61,9 @@ Tracking: [GitHub Issue #1](https://github.com/rytich/play-cms/issues/1)
 - Create: `vitest.config.ts`
 - Create: `eslint.config.js`
 - Create: `.prettierrc.json`
+- Create: `.prettierignore`
 - Create: `.gitignore`
+- Create: `.agents/skills/play-cms-reviewer/SKILL.md`
 - Create: `src/admin/index.html`
 - Create: `src/admin/main.tsx`
 - Create: `src/server/app.ts`
@@ -97,7 +99,9 @@ const requiredFiles = [
   'SECURITY.md',
   '.github/ISSUE_TEMPLATE/bug.yml',
   '.github/ISSUE_TEMPLATE/feature.yml',
+  '.github/ISSUE_TEMPLATE/docs.yml',
   '.github/pull_request_template.md',
+  '.agents/skills/play-cms-reviewer/SKILL.md',
 ]
 
 describe('repository contract', () => {
@@ -110,6 +114,7 @@ describe('repository contract', () => {
     expect(agents).toContain('CONTRIBUTING.md')
     expect(agents).toContain('docs/development/workflow.md')
     expect(agents).toContain('pnpm verify')
+    expect(agents).toContain('.agents/skills/play-cms-reviewer/SKILL.md')
   })
 })
 ```
@@ -121,7 +126,7 @@ Expected: FAIL。`AGENTS.md`が存在しない旨が表示される。
 
 - [ ] **Step 3: 最小構成と運用文書を作成する**
 
-`package.json`には`dev`、`test`、`lint`、`typecheck`、`build:ui`、`verify`を定義する。Task 1時点の`verify`は`lint && typecheck && test && build:ui`を順番に実行する。`build:worker`と`build:node`は実行エントリーポイントを追加するTask 7で定義し、その時点で`verify`へ追加する。
+`package.json`には`dev`、`test`、`lint`、`typecheck`、`build:ui`、`format:check`、`verify`を定義する。Task 1時点の`verify`は`lint && typecheck && test && build:ui && format:check`を順番に実行する。`build:worker`と`build:node`は実行エントリーポイントを追加するTask 7で定義し、その時点で`verify`へ追加する。
 
 `AGENTS.md`は以下を入口にする。
 
@@ -135,6 +140,7 @@ Expected: FAIL。`AGENTS.md`が存在しない旨が表示される。
 3. 開発手順とGitHub運用は`CONTRIBUTING.md`と`docs/development/workflow.md`に従う。
 4. 技術判断は`docs/decisions/`を確認する。
 5. 完了報告前に`pnpm verify`を実行し、結果を記録する。
+6. PR作成後は別エージェントに`.agents/skills/play-cms-reviewer/SKILL.md`を読ませ、独立レビューを実行する。
 
 秘密情報をコミット、ログ出力、IssueやPRへ記載しない。公開Issueで脆弱性を報告せず`SECURITY.md`へ誘導する。
 ```
@@ -143,13 +149,13 @@ Issue Formsではバグに再現手順・期待結果・実際の結果・環境
 
 - [ ] **Step 4: 契約テストと静的検査を通す**
 
-Run: `pnpm exec vitest run tests/unit/repository-contract.test.ts && pnpm lint && pnpm typecheck`
-Expected: PASS。Vitestは全テスト成功、ESLintとTypeScriptはエラー0件。
+Run: `pnpm exec vitest run tests/unit/repository-contract.test.ts && pnpm verify`
+Expected: PASS。Vitestは全テスト成功、ESLint、TypeScript、Vite、Prettierはエラー0件。
 
 - [ ] **Step 5: コミットする**
 
 ```bash
-git add package.json pnpm-lock.yaml tsconfig.json vite.config.ts vitest.config.ts eslint.config.js .prettierrc.json .gitignore src/admin src/server tests/unit/repository-contract.test.ts AGENTS.md README.md CONTRIBUTING.md SECURITY.md .github docs/development/workflow.md
+git add package.json pnpm-lock.yaml tsconfig.json vite.config.ts vitest.config.ts eslint.config.js .prettierrc.json .prettierignore .gitignore .agents/skills/play-cms-reviewer/SKILL.md src/admin src/server tests/unit/repository-contract.test.ts AGENTS.md README.md CONTRIBUTING.md SECURITY.md .github docs/development/workflow.md
 git commit -m "chore: initialize play-cms development foundation"
 ```
 

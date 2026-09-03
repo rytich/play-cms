@@ -39,13 +39,24 @@ describe('repository contract', () => {
     }
     const readme = await readFile('README.md', 'utf8')
 
-    expect(packageJson.engines.node).toBe('>=22.13.0')
-    expect(readme).toContain('Node.js 22.13.0以上')
+    expect(packageJson.engines.node).toBe('^22.13.0 || >=24.0.0')
+    expect(readme).toContain('Node.js 22.13.0系または24以上')
   })
 
   it('links the canonical workflow to its tracking issue', async () => {
     const workflow = await readFile('docs/development/workflow.md', 'utf8')
 
     expect(workflow).toContain('https://github.com/rytich/play-cms/issues/1')
+  })
+
+  it('keeps the Task 1 plan synchronized with the repository contract', async () => {
+    const plan = await readFile(
+      'docs/superpowers/plans/2026-09-03-foundation-implementation.md',
+      'utf8',
+    )
+
+    expect(plan).toContain('.prettierignore')
+    expect(plan).toContain('.agents/skills/play-cms-reviewer/SKILL.md')
+    expect(plan).toContain('format:check')
   })
 })
