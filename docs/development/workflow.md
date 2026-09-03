@@ -1,5 +1,7 @@
 # 開発とGitHub運用
 
+Tracking: [GitHub Issue #1](https://github.com/rytich/play-cms/issues/1)
+
 ## 原則
 
 - Issueは作業状態を追跡します。
@@ -29,5 +31,11 @@
 4. featureブランチをpushします。
 5. `develop`向けPRを作り、`Refs #<番号>`を記載します。
 6. CIとレビューの結果をIssueへ反映します。
+
+## 独立レビュー
+
+PR作成後、実装会話の履歴を持たない別エージェントに`.agents/skills/play-cms-reviewer/SKILL.md`を読ませます。base/head SHA、Issue、PR、Task、設計書、計画だけを入力し、読み取り専用でレビューさせます。
+
+調整担当者は指摘を確認してからPRとIssueへ記録します。CriticalまたはImportantがある場合は修正し、更新後のhead SHAに対して別エージェントで再レビューします。Approveとマージは人間または別のGitHub資格情報を持つレビュー担当者が行います。
 
 `develop`は既定ブランチではないため、GitHubのキーワードによるIssue自動クローズは働きません。PRのマージ後にIssueへマージ済みPRをコメントし、手動で閉じます。Issueの終了を確認してから次のTaskへ進みます。
