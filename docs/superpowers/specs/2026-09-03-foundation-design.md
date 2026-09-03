@@ -3,6 +3,7 @@
 - 状態: 承認済み
 - 作成日: 2026-09-03
 - 関連判断: [ADR 0001](../../decisions/0001-use-lightweight-portable-architecture.md)
+- 基盤実装: [GitHub Issue #1](https://github.com/rytich/play-cms/issues/1)
 
 ## 目的
 

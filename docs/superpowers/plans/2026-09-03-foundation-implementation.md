@@ -50,7 +50,10 @@ PRがマージされ、Issueが閉じたことを確認するまで、そのTask
 
 ### Task 1: 開発基盤とリポジトリ運用
 
+Tracking: [GitHub Issue #1](https://github.com/rytich/play-cms/issues/1)
+
 **Files:**
+
 - Create: `package.json`
 - Create: `pnpm-lock.yaml`
 - Create: `tsconfig.json`
@@ -75,6 +78,7 @@ PRがマージされ、Issueが閉じたことを確認するまで、そのTask
 - Create: `docs/development/workflow.md`
 
 **Interfaces:**
+
 - Consumes: `docs/superpowers/specs/2026-09-03-foundation-design.md`
 - Produces: `pnpm test`, `pnpm lint`, `pnpm typecheck`, `pnpm build:ui`と、全作業者が参照する開発規約。
 
@@ -117,7 +121,7 @@ Expected: FAIL。`AGENTS.md`が存在しない旨が表示される。
 
 - [ ] **Step 3: 最小構成と運用文書を作成する**
 
-`package.json`には`dev`、`test`、`lint`、`typecheck`、`build:ui`、`build:worker`、`build:node`、`verify`を定義する。`verify`は`lint && typecheck && test && build:ui && build:worker && build:node`を順番に実行する。
+`package.json`には`dev`、`test`、`lint`、`typecheck`、`build:ui`、`verify`を定義する。Task 1時点の`verify`は`lint && typecheck && test && build:ui`を順番に実行する。`build:worker`と`build:node`は実行エントリーポイントを追加するTask 7で定義し、その時点で`verify`へ追加する。
 
 `AGENTS.md`は以下を入口にする。
 
@@ -152,6 +156,7 @@ git commit -m "chore: initialize play-cms development foundation"
 ### Task 2: 暗号化と管理者認証のコア
 
 **Files:**
+
 - Create: `src/core/admin.ts`
 - Create: `src/core/session.ts`
 - Create: `src/application/ports/admin-repository.ts`
@@ -165,6 +170,7 @@ git commit -m "chore: initialize play-cms development foundation"
 - Test: `tests/unit/web-crypto-secrets.test.ts`
 
 **Interfaces:**
+
 - Consumes: Web Crypto API。
 - Produces: `AdminRepository`、`SessionRepository`、`PasswordHasher`、`SecretBox`、`registerFirstAdmin()`、`loginAdmin()`、`logoutAdmin()`、`updateAdminProfile()`。
 
@@ -173,12 +179,18 @@ git commit -m "chore: initialize play-cms development foundation"
 ```ts
 it('registers only the first administrator', async () => {
   const first = await registerFirstAdmin(deps, {
-    email: 'owner@example.com', name: 'Owner', password: 'correct horse battery staple',
+    email: 'owner@example.com',
+    name: 'Owner',
+    password: 'correct horse battery staple',
   })
   expect(first.email).toBe('owner@example.com')
-  await expect(registerFirstAdmin(deps, {
-    email: 'other@example.com', name: 'Other', password: 'another secure password',
-  })).rejects.toMatchObject({ code: 'ADMIN_ALREADY_EXISTS' })
+  await expect(
+    registerFirstAdmin(deps, {
+      email: 'other@example.com',
+      name: 'Other',
+      password: 'another secure password',
+    }),
+  ).rejects.toMatchObject({ code: 'ADMIN_ALREADY_EXISTS' })
 })
 ```
 
@@ -218,6 +230,7 @@ git commit -m "feat: add administrator authentication core"
 ### Task 3: 共通スキーマとDBアダプター
 
 **Files:**
+
 - Create: `src/adapters/database/schema.ts`
 - Create: `src/adapters/database/drizzle-admin-repository.ts`
 - Create: `src/adapters/database/drizzle-session-repository.ts`
@@ -228,6 +241,7 @@ git commit -m "feat: add administrator authentication core"
 - Test: `tests/integration/database-repositories.test.ts`
 
 **Interfaces:**
+
 - Consumes: Task 2の`AdminRepository`と`SessionRepository`。
 - Produces: `SettingsRepository`とD1・SQLiteで共有するDrizzleリポジトリ。
 
@@ -236,11 +250,16 @@ git commit -m "feat: add administrator authentication core"
 ```ts
 it('persists an encrypted Filma setting without exposing plaintext', async () => {
   await settings.saveFilmaConnection({
-    apiHost: 'filma.biz', encryptedApiKey: 'v1.iv.cipher', organizationId: 12,
-    apiType: 'fullaccess', checkedAt: new Date('2026-09-03T00:00:00Z'),
+    apiHost: 'filma.biz',
+    encryptedApiKey: 'v1.iv.cipher',
+    organizationId: 12,
+    apiType: 'fullaccess',
+    checkedAt: new Date('2026-09-03T00:00:00Z'),
   })
   expect(await settings.getFilmaConnection()).toMatchObject({
-    apiHost: 'filma.biz', encryptedApiKey: 'v1.iv.cipher', organizationId: 12,
+    apiHost: 'filma.biz',
+    encryptedApiKey: 'v1.iv.cipher',
+    organizationId: 12,
   })
   expect(JSON.stringify(await dumpTables(db))).not.toContain('plain-api-key')
 })
@@ -270,6 +289,7 @@ git commit -m "feat: add portable sqlite repositories"
 ### Task 4: 管理者HTTP API
 
 **Files:**
+
 - Modify: `src/server/app.ts`
 - Create: `src/server/dependencies.ts`
 - Create: `src/server/middleware/admin-session.ts`
@@ -280,6 +300,7 @@ git commit -m "feat: add portable sqlite repositories"
 - Test: `tests/integration/admin-api.test.ts`
 
 **Interfaces:**
+
 - Consumes: Task 2の認証ユースケース、Task 3のリポジトリ。
 - Produces: `createApp(deps: AppDependencies): Hono`、`POST /api/setup/admin`、`POST /api/auth/login`、`POST /api/auth/logout`、`GET/PATCH /api/admin/profile`。
 
@@ -288,15 +309,21 @@ git commit -m "feat: add portable sqlite repositories"
 ```ts
 it('logs in and returns the administrator profile', async () => {
   const login = await app.request('/api/auth/login', {
-    method: 'POST', headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ email: 'owner@example.com', password: 'secure password 123' }),
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      email: 'owner@example.com',
+      password: 'secure password 123',
+    }),
   })
   expect(login.status).toBe(204)
   const cookie = login.headers.get('set-cookie')
   expect(cookie).toContain('play_session=')
   expect(cookie).toContain('HttpOnly')
   expect(cookie).toContain('SameSite=Lax')
-  const profile = await app.request('/api/admin/profile', { headers: { cookie: cookie! } })
+  const profile = await app.request('/api/admin/profile', {
+    headers: { cookie: cookie! },
+  })
   expect(await profile.json()).toMatchObject({ email: 'owner@example.com' })
 })
 ```
@@ -325,6 +352,7 @@ git commit -m "feat: expose secure administrator API"
 ### Task 5: Filma接続設定
 
 **Files:**
+
 - Create: `src/application/ports/filma-client.ts`
 - Create: `src/application/use-cases/configure-filma.ts`
 - Create: `src/adapters/filma/http-filma-client.ts`
@@ -335,6 +363,7 @@ git commit -m "feat: expose secure administrator API"
 - Test: `tests/integration/filma-settings-api.test.ts`
 
 **Interfaces:**
+
 - Consumes: `SecretBox`、`SettingsRepository`、Filma API `POST /filmaapi/token`。
 - Produces: `FilmaClient.verifyApiKey()`、`configureFilma()`、`GET/PUT /api/admin/filma-settings`。
 
@@ -343,10 +372,15 @@ git commit -m "feat: expose secure administrator API"
 ```ts
 it('verifies and encrypts the API key before saving', async () => {
   await configureFilma(deps, { apiHost: 'filma.biz', apiKey: 'secret-key' })
-  expect(filma.requests[0]).toEqual({ apiHost: 'filma.biz', apiKey: 'secret-key' })
+  expect(filma.requests[0]).toEqual({
+    apiHost: 'filma.biz',
+    apiKey: 'secret-key',
+  })
   expect(settings.saved).toMatchObject({
-    apiHost: 'filma.biz', encryptedApiKey: 'encrypted:secret-key',
-    organizationId: 42, apiType: 'fullaccess',
+    apiHost: 'filma.biz',
+    encryptedApiKey: 'encrypted:secret-key',
+    organizationId: 42,
+    apiType: 'fullaccess',
   })
   expect(JSON.stringify(settings.saved)).not.toContain('"apiKey":"secret-key"')
 })
@@ -366,7 +400,10 @@ export type FilmaConnection = {
 }
 
 export interface FilmaClient {
-  verifyApiKey(input: { apiHost: string; apiKey: string }): Promise<FilmaConnection>
+  verifyApiKey(input: {
+    apiHost: string
+    apiKey: string
+  }): Promise<FilmaConnection>
 }
 ```
 
@@ -387,6 +424,7 @@ git commit -m "feat: add encrypted Filma connection settings"
 ### Task 6: 管理画面
 
 **Files:**
+
 - Modify: `src/admin/main.tsx`
 - Create: `src/admin/app.tsx`
 - Create: `src/admin/api.ts`
@@ -399,6 +437,7 @@ git commit -m "feat: add encrypted Filma connection settings"
 - Test: `tests/e2e/admin-onboarding.spec.ts`
 
 **Interfaces:**
+
 - Consumes: Task 4とTask 5のHTTP API。
 - Produces: `/admin`の初期登録、ログイン、プロフィール、Filma設定画面。
 
@@ -406,10 +445,17 @@ git commit -m "feat: add encrypted Filma connection settings"
 
 ```tsx
 it('shows connection metadata without rendering the saved API key', async () => {
-  render(<FilmaSettingsPage api={fakeApi({
-    configured: true, apiHost: 'filma.biz', organizationId: 42,
-    apiType: 'fullaccess', checkedAt: '2026-09-03T00:00:00.000Z',
-  })} />)
+  render(
+    <FilmaSettingsPage
+      api={fakeApi({
+        configured: true,
+        apiHost: 'filma.biz',
+        organizationId: 42,
+        apiType: 'fullaccess',
+        checkedAt: '2026-09-03T00:00:00.000Z',
+      })}
+    />,
+  )
   expect(await screen.findByText('接続済み')).toBeVisible()
   expect(screen.getByText('組織ID: 42')).toBeVisible()
   expect(screen.queryByDisplayValue('secret-key')).not.toBeInTheDocument()
@@ -440,6 +486,7 @@ git commit -m "feat: add administrator onboarding UI"
 ### Task 7: CloudflareとDockerの配布構成
 
 **Files:**
+
 - Create: `src/entrypoints/cloudflare.ts`
 - Create: `src/entrypoints/node.ts`
 - Create: `src/runtime/cloudflare-dependencies.ts`
@@ -456,6 +503,7 @@ git commit -m "feat: add administrator onboarding UI"
 - Modify: `README.md`
 
 **Interfaces:**
+
 - Consumes: `createApp(deps)`、D1・SQLiteリポジトリ、Worker secrets。
 - Produces: Workerエントリーポイント、Node.jsサーバー、Deploy to Cloudflareボタン、Docker起動手順。
 
@@ -463,7 +511,9 @@ git commit -m "feat: add administrator onboarding UI"
 
 ```ts
 it('rejects missing application secrets', () => {
-  expect(() => parseRuntimeConfig({})).toThrow('PLAY_SESSION_SECRET is required')
+  expect(() => parseRuntimeConfig({})).toThrow(
+    'PLAY_SESSION_SECRET is required',
+  )
 })
 
 it('keeps real secrets out of example files', async () => {
@@ -508,6 +558,7 @@ git commit -m "feat: add Cloudflare and Docker deployment targets"
 ### Task 8: CIと最終文書
 
 **Files:**
+
 - Create: `.github/workflows/ci.yml`
 - Create: `docs/architecture/overview.md`
 - Create: `docs/product/foundation.md`
@@ -517,6 +568,7 @@ git commit -m "feat: add Cloudflare and Docker deployment targets"
 - Test: `tests/unit/documentation-links.test.ts`
 
 **Interfaces:**
+
 - Consumes: Tasks 1-7の検証コマンドと文書。
 - Produces: 全PRで実行されるCI、利用者・開発者向けの正本文書。
 
@@ -526,7 +578,11 @@ git commit -m "feat: add Cloudflare and Docker deployment targets"
 import { findBrokenLocalMarkdownLinks } from '../helpers/markdown-links'
 
 it('resolves every local Markdown link', async () => {
-  const failures = await findBrokenLocalMarkdownLinks(['README.md', 'CONTRIBUTING.md', 'docs'])
+  const failures = await findBrokenLocalMarkdownLinks([
+    'README.md',
+    'CONTRIBUTING.md',
+    'docs',
+  ])
   expect(failures).toEqual([])
 })
 ```
