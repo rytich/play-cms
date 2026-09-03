@@ -38,9 +38,14 @@ describe('repository contract', () => {
       engines: { node: string }
     }
     const readme = await readFile('README.md', 'utf8')
+    const specification = await readFile(
+      'docs/superpowers/specs/2026-09-03-foundation-design.md',
+      'utf8',
+    )
 
     expect(packageJson.engines.node).toBe('^22.13.0 || >=24.0.0')
     expect(readme).toContain('Node.js 22.13.0系または24以上')
+    expect(specification).toContain('Node.js 22.13.0以上の22.x、または24以上')
   })
 
   it('states the current unlicensed repository status without claiming open source', async () => {
@@ -73,6 +78,16 @@ describe('repository contract', () => {
     expect(plan).toContain('Task 8でCIを導入するまでは')
     expect(contributing).toContain('Task 7で導入するまでは')
     expect(contributing).toContain('Task 8でCIを導入するまでは')
+  })
+
+  it('distinguishes custom labels from the reused GitHub default label', async () => {
+    const specification = await readFile(
+      'docs/superpowers/specs/2026-09-03-foundation-design.md',
+      'utf8',
+    )
+
+    expect(specification).toContain('カスタムラベル9件')
+    expect(specification).toContain('GitHub既定の`good first issue`を再利用')
   })
 
   it('keeps the Task 1 plan synchronized with the repository contract', async () => {

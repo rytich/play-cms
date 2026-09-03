@@ -29,7 +29,7 @@ Filmaと連携する動画CMSの開発基盤を構築する。Cloudflareを推�
 - DB: Drizzle ORM
 - テスト: Vitest、必要なユーザーフローのみPlaywright
 - Cloudflare: Workers、D1、R2、Workers Builds
-- Node.js: Node.js 22 LTS以上、SQLite、ローカルストレージ
+- Node.js: Node.js 22.13.0以上の22.x、または24以上、SQLite、ローカルストレージ
 - 配布: Deploy to Cloudflareボタン、Dockerfile、compose.yaml
 
 Workers Freeでの動作は保証ではなく設計目標とする。CIでWorker成果物サイズを計測し、無料枠の上限変更は公式ドキュメントを基準に判断する。
@@ -182,7 +182,7 @@ DockerfileはNode.jsランタイムで同じHonoアプリを起動する。compo
 
 ### ラベル
 
-初期のカスタムラベルとして`type:bug`、`type:feature`、`type:docs`、`area:cloudflare`、`area:docker`、`area:filma`、`area:auth`、`status:needs-design`、`status:ready`、`good first issue`を追加する。GitHub既定ラベルが残っていても、新規Issueの種別分類には`type:*`を正本として使用する。ラベルは分類と着手可能性を示し、進捗の詳細はIssue本文とチェックリストで管理する。
+初期のカスタムラベル9件として`type:bug`、`type:feature`、`type:docs`、`area:cloudflare`、`area:docker`、`area:filma`、`area:auth`、`status:needs-design`、`status:ready`を追加し、GitHub既定の`good first issue`を再利用する。新規Issueの種別分類には`type:*`を正本として使用する。ラベルは分類と着手可能性を示し、進捗の詳細はIssue本文とチェックリストで管理する。
 
 ## 最初の実装単位の完了条件
 
