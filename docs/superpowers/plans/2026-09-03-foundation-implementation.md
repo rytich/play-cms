@@ -20,6 +20,31 @@
 - CloudflareとNode.jsで同じCore、Application、Server、UIを使用する。
 - 振る舞いを追加する前に、失敗するテストを実行して失敗理由を確認する。
 - Issueは作業状態、リポジトリ内文書は確定した設計と運用の正本とする。
+- 各Taskは一つのGitHub Issueと一つの`develop`向けPRで実施する。
+- Issue、PR、関連するリポジトリ内文書を相互にリンクする。
+
+---
+
+## 全Task共通のGitHub実行手順
+
+各TaskのStep 1より前に、次を実行する。
+
+1. Issue検索で同じTaskが未作成であることを確認する。
+2. タイトルを`Task N: <Task名>`としてIssueを作成する。
+3. Issue本文に設計書`docs/superpowers/specs/2026-09-03-foundation-design.md`、本計画、対象Task、完了条件、対象外を記載する。
+4. `develop`から`feature/issue-<番号>-<英語の短い概要>`を作成する。
+5. Issueへブランチ名、着手時点のコミット、実行予定テストをコメントする。
+
+各Taskのコミット後に、次を実行する。
+
+1. Task固有のテストと`pnpm verify`を実行する。
+2. Issueへ実行したコマンド、成功・失敗件数、未確認事項をコメントする。
+3. 変更した設計書・ADR・開発文書へ`GitHub Issue #<番号>`の参照を追加する。
+4. ブランチをpushし、`develop`向けPRを作成する。
+5. PR本文に`Closes #<番号>`、変更範囲、リスク、テスト結果、関連文書を記載する。
+6. CI結果を確認し、失敗時は原因と対応をIssueへコメントする。
+
+PRがマージされ、Issueが閉じたことを確認するまで、そのTaskを完了扱いにしない。次のTaskは前Taskのマージ後の`develop`から開始する。
 
 ---
 
