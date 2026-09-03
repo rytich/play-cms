@@ -29,4 +29,4 @@ Cloudflare用とNode.js用のビルドをTask 7で導入するまでは、Task�
 pnpm verify
 ```
 
-AIが作成した変更も人間によるレビュー対象です。テスト結果や未確認事項を省略しないでください。
+AIが作成した変更も独立レビューの対象です。レビュー担当者は結果を確認し、Ready判定のときだけ、規約に従って`knryt`として自動Approveできます。自動Approveではレビュー対象のhead SHA、Draft状態、必須CI、Critical・Importantの有無、PR作成者を再確認してください。マージは人間が行います。テスト結果や未確認事項を省略しないでください。

@@ -41,4 +41,12 @@ Every finding includes `file:line`, evidence, impact, and a concrete correction.
 
 ## Handoff
 
-The reviewer returns findings to the coordinating agent only. The coordinator verifies findings before posting them to the PR and Issue. Critical and Important findings require a fix and a new independent review against the updated head SHA. A human or separately authenticated GitHub reviewer performs Approve and merge.
+The reviewer returns findings to the coordinating agent only. The coordinator verifies findings before posting them to the PR and Issue. Critical and Important findings require a fix and a new independent review against the updated head SHA.
+
+After verification, the coordinator may act as the separately authenticated `knryt` GitHub reviewer:
+
+- `Ready`: post the review summary and submit `APPROVE` for the exact reviewed head SHA.
+- `Ready with minor follow-up`: post the review summary as `COMMENT`; do not approve automatically.
+- `Not ready`: post the review summary and submit `REQUEST_CHANGES`.
+
+Automatic `APPROVE` is allowed only when the PR is not a draft, the reviewed head SHA is still current, all required checks (if any) have passed, and the review has no Critical or Important findings. Never approve a stale head, an incomplete review, or a PR authored by `knryt`. Merging remains a separate human-controlled action.
