@@ -36,6 +36,6 @@ Tracking: [GitHub Issue #1](https://github.com/rytich/play-cms/issues/1)
 
 PR作成後、実装会話の履歴を持たない別エージェントに`.agents/skills/play-cms-reviewer/SKILL.md`を読ませます。base/head SHA、Issue、PR、Task、設計書、計画だけを入力し、読み取り専用でレビューさせます。
 
-調整担当者は指摘を確認してからPRとIssueへ記録します。CriticalまたはImportantがある場合は修正し、更新後のhead SHAに対して別エージェントで再レビューします。Ready判定の場合は、調整担当者が`knryt`としてレビュー概要をコメントし、確認済みのhead SHAへ自動Approveできます。自動ApproveはDraftではなく、必須CI（存在する場合）が成功し、CriticalまたはImportantがなく、PR作成者が`knryt`ではない場合に限ります。Ready with minor follow-upはコメントのみ、Not readyはREQUEST_CHANGESとします。マージは引き続き人間が行います。
+調整担当者は指摘を確認してからPRとIssueへ記録します。CriticalまたはImportantがある場合は修正し、更新後のhead SHAに対して別エージェントで再レビューします。Ready判定の場合は、調整担当者が`knryt`としてレビュー概要をコメントし、確認済みのhead SHAへ自動Approveできます。自動Approveと自動Mergeは、Draftではなく、必須CI（存在する場合）が成功し、PRがmergeableで、CriticalまたはImportantがなく、PR作成者が`knryt`ではない場合に限ります。Approveの直後にPRを再取得し、同じhead SHAとマージ条件を確認してから、リポジトリ設定のマージ方式でMergeします。Mergeに成功した場合のみソースブランチを削除します。条件が変わった場合やMergeに失敗した場合は再試行せず停止して報告します。Ready with minor follow-upはコメントのみ、Not readyはREQUEST_CHANGESとします。
 
 `develop`は既定ブランチではないため、GitHubのキーワードによるIssue自動クローズは働きません。PRのマージ後にIssueへマージ済みPRをコメントし、手動で閉じます。Issueの終了を確認してから次のTaskへ進みます。
