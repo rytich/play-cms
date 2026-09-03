@@ -29,4 +29,4 @@ Cloudflare用とNode.js用のビルドをTask 7で導入するまでは、Task�
 pnpm verify
 ```
 
-AIが作成した変更も独立レビューの対象です。レビュー担当者は結果を確認し、Ready判定のときだけ、規約に従って`knryt`として自動Approveできます。自動Approveと自動Mergeではレビュー対象のhead SHA、Draft状態、必須CI、mergeable状態、Critical・Importantの有無、PR作成者を再確認してください。Approve後に同じhead SHAとマージ条件を再確認し、Merge成功後にだけソースブランチを削除します。条件変更や失敗時は盲目的に再試行しません。テスト結果や未確認事項を省略しないでください。
+AIが作成した変更も独立レビューの対象です。レビュー担当者は結果を確認し、Ready判定のときだけ、規約に従って`knryt`として自動Approveできます。Task 8より前は記録済みのexact-headローカル検証を確認し、Task 8以降はrequired指定の有無にかかわらずreview対象headのCIチェックが存在し、すべて成功していることを確認します。チェック0件は成功扱いにしません。自動Approveと自動Mergeではレビュー対象のhead SHA、Draft状態、mergeable状態、Critical・Importantの有無、PR作成者も再確認してください。Approve後に同じhead SHAとマージ条件を再確認し、`gh pr merge <pr-number> --merge --match-head-commit <reviewed-head-sha>`でmerge commit方式を固定してhead変更を原子的に拒否します。Merge成功後にだけソースブランチを削除し、条件変更や失敗時は盲目的に再試行しません。テスト結果や未確認事項を省略しないでください。

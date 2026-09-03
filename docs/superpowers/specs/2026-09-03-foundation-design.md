@@ -177,8 +177,8 @@ DockerfileはNode.jsランタイムで同じHonoアプリを起動する。compo
 - 変更内容、リスク、確認したシナリオ、未確認事項を記載する。
 - 振る舞いの変更にはテストを追加し、文書も同じPRで更新する。
 - 各Taskで利用可能な検証を通す。Cloudflare用とNode.js用のビルドをTask 7で導入するまでは、Task固有テストとその時点の`pnpm verify`を必須とする。導入後は両環境のビルドも必須とする。
-- Task 8でCIを導入するまでは、ローカル検証のコマンドと結果をIssueとPRへ記録し、独立レビューをマージ条件とする。導入後はCI成功も必須とする。
-- AIによる変更も独立レビューし、実行結果をPRへ残す。規約の条件を満たす場合は`knryt`として自動Approve・自動Mergeできる。
+- Task 8でCIを導入するまでは、ローカル検証のコマンドと結果をIssueとPRへ記録し、独立レビューをマージ条件とする。導入後はrequired指定の有無にかかわらずreview対象headのCIチェックが存在し、すべて成功していることを必須とし、チェック0件は成功扱いにしない。
+- AIによる変更も独立レビューし、実行結果をPRへ残す。規約の条件を満たす場合は`knryt`として自動Approve・自動Mergeできる。`gh pr merge <pr-number> --merge --match-head-commit <reviewed-head-sha>`でmerge commit方式を固定し、review後のhead変更を原子的に拒否する。
 
 ### ラベル
 

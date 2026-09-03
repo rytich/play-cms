@@ -100,4 +100,57 @@ describe('repository contract', () => {
     expect(plan).toContain('.agents/skills/play-cms-reviewer/SKILL.md')
     expect(plan).toContain('format:check')
   })
+
+  it('binds every automated merge to the exact reviewed head', async () => {
+    const policyPaths = [
+      '.agents/skills/play-cms-reviewer/SKILL.md',
+      'CONTRIBUTING.md',
+      'docs/development/workflow.md',
+      'docs/superpowers/specs/2026-09-03-foundation-design.md',
+    ]
+
+    for (const path of policyPaths) {
+      const policy = await readFile(path, 'utf8')
+
+      expect(policy).toContain('--match-head-commit <reviewed-head-sha>')
+    }
+  })
+
+  it('requires successful CI for the reviewed head after Task 8', async () => {
+    const reviewerSkill = await readFile(
+      '.agents/skills/play-cms-reviewer/SKILL.md',
+      'utf8',
+    )
+    const japanesePolicyPaths = [
+      'CONTRIBUTING.md',
+      'docs/development/workflow.md',
+      'docs/superpowers/specs/2026-09-03-foundation-design.md',
+    ]
+
+    expect(reviewerSkill).toContain(
+      'all expected CI checks for the reviewed head are present and successful',
+    )
+    for (const path of japanesePolicyPaths) {
+      const policy = await readFile(path, 'utf8')
+
+      expect(policy).toContain('review対象headのCIチェックが存在し、すべて成功')
+    }
+  })
+
+  it('uses one explicit merge-commit command for automated merges', async () => {
+    const policyPaths = [
+      '.agents/skills/play-cms-reviewer/SKILL.md',
+      'CONTRIBUTING.md',
+      'docs/development/workflow.md',
+      'docs/superpowers/specs/2026-09-03-foundation-design.md',
+    ]
+
+    for (const path of policyPaths) {
+      const policy = await readFile(path, 'utf8')
+
+      expect(policy).toContain(
+        'gh pr merge <pr-number> --merge --match-head-commit <reviewed-head-sha>',
+      )
+    }
+  })
 })
