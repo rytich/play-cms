@@ -1,6 +1,6 @@
 ## 関連Issue
 
-Closes #
+Refs #
 
 ## 変更
 
