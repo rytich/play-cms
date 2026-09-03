@@ -9,5 +9,6 @@
 5. TaskのIssueを作成してからfeatureブランチで着手する。
 6. 完了報告前に`pnpm verify`を実行し、結果をIssueとPRへ記録する。
 7. PR作成後は別エージェントに`.agents/skills/play-cms-reviewer/SKILL.md`を読ませ、独立レビューを実行する。
+8. 自動Approve・自動Mergeは`docs/decisions/0002-use-knryt-automated-pr-reviewer.md`の条件を満たす`knryt`レビューワーだけが実行する。
 
 秘密情報をコミット、ログ出力、IssueやPRへ記載しないでください。脆弱性を公開Issueで報告せず、`SECURITY.md`へ誘導してください。

@@ -602,7 +602,7 @@ Expected: FAIL。`findBrokenLocalMarkdownLinks`が存在しない。
 
 `findBrokenLocalMarkdownLinks(paths: string[]): Promise<string[]>`は指定されたMarkdownファイルとディレクトリを再帰的に読み、HTTP URLとページ内アンカーを除く相対リンクについて、リンク元から解決したファイルが存在しない場合に`<source> -> <target>`を返す。
 
-CIはNode.js 22とpnpm lockfileを使い、`pnpm install --frozen-lockfile`、`pnpm verify`、`pnpm check:worker-size`を実行する。CI成功後に`develop`へactive rulesetを設定し、pull request ruleの`required_approving_review_count: 1`、`Dismiss stale pull request approvals`、`Require branches to be up to date before merging`、CIジョブの`required status checks`、merge commit方式を必須化する。`knryt`を含む自動実行者へbypassを付与しない。GitHub APIでrulesetがactiveであり、必須承認数、対象ルール、required checkが実際に適用されることを確認する。`overview.md`にはコンポーネント境界とCloudflare／Node.jsの依存方向、`foundation.md`には提供機能と対象外、READMEにはCloudflareとDockerの最短導入手順を記載する。
+CIはNode.js 22とpnpm lockfileを使い、`pnpm install --frozen-lockfile`、`pnpm verify`、`pnpm check:worker-size`を実行する。CI成功後に`develop`へactive rulesetを設定し、pull request ruleの`required_approving_review_count: 1`、`Dismiss stale pull request approvals`、`Require branches to be up to date before merging`、CIジョブの`required status checks`、merge commit方式を必須化する。`knryt`を含む自動実行者へbypassを付与しない。GitHub APIでrulesetがactiveであり、必須承認数、対象ルール、required checkが実際に適用されることを確認する。自動レビュー・Approve・Mergeの実装と資格情報は[ADR 0002](../../decisions/0002-use-knryt-automated-pr-reviewer.md)に従い、対象repositoryとbase branchの許可リスト、未信頼Webhook入力、二段階処理、最小権限を検証する。`overview.md`にはコンポーネント境界とCloudflare／Node.jsの依存方向、`foundation.md`には提供機能と対象外、READMEにはCloudflareとDockerの最短導入手順を記載する。
 
 - [ ] **Step 4: 全検証を実行する**
 
