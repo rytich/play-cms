@@ -176,12 +176,13 @@ DockerfileはNode.jsランタイムで同じHonoアプリを起動する。compo
 - 設計書、ADR、運用文書から関連IssueまたはPRを参照し、Issue・PRから変更文書を参照する。
 - 変更内容、リスク、確認したシナリオ、未確認事項を記載する。
 - 振る舞いの変更にはテストを追加し、文書も同じPRで更新する。
-- `lint`、型検査、単体・統合テスト、両環境のビルドを通す。
+- 各Taskで利用可能な検証を通す。Cloudflare用とNode.js用のビルドをTask 7で導入するまでは、Task固有テストとその時点の`pnpm verify`を必須とする。導入後は両環境のビルドも必須とする。
+- Task 8でCIを導入するまでは、ローカル検証のコマンドと結果をIssueとPRへ記録し、独立レビューをマージ条件とする。導入後はCI成功も必須とする。
 - AIによる変更も人間がレビューし、実行結果をPRへ残す。
 
 ### ラベル
 
-初期ラベルは`type:bug`、`type:feature`、`type:docs`、`area:cloudflare`、`area:docker`、`area:filma`、`area:auth`、`status:needs-design`、`status:ready`、`good first issue`に限定する。ラベルは分類と着手可能性を示し、進捗の詳細はIssue本文とチェックリストで管理する。
+初期のカスタムラベルとして`type:bug`、`type:feature`、`type:docs`、`area:cloudflare`、`area:docker`、`area:filma`、`area:auth`、`status:needs-design`、`status:ready`、`good first issue`を追加する。GitHub既定ラベルが残っていても、新規Issueの種別分類には`type:*`を正本として使用する。ラベルは分類と着手可能性を示し、進捗の詳細はIssue本文とチェックリストで管理する。
 
 ## 最初の実装単位の完了条件
 
@@ -218,7 +219,7 @@ DockerfileはNode.jsランタイムで同じHonoアプリを起動する。compo
 6. Issueへ検証コマンド、成功・失敗件数、未確認事項をコメントする。
 7. 文書へ関連Issue番号を記載し、コミットする。
 8. `develop`向けPRを作成し、本文に`Refs #<番号>`、変更、リスク、確認結果、文書リンクを記載する。
-9. レビューとCI完了後にマージし、Issueへマージ済みPRをコメントして手動で閉じる。
+9. 独立レビューと、そのTask時点で利用可能なマージゲートを完了してからマージする。Task 8でCIを導入するまでは記録済みのローカル検証を、導入後はCI成功も確認する。Issueへマージ済みPRをコメントして手動で閉じる。
 
 IssueやPRの更新を省略した実装は完了扱いにしない。
 

@@ -30,7 +30,7 @@ Tracking: [GitHub Issue #1](https://github.com/rytich/play-cms/issues/1)
 3. 関連文書へIssue番号を追加します。
 4. featureブランチをpushします。
 5. `develop`向けPRを作り、`Refs #<番号>`を記載します。
-6. CIとレビューの結果をIssueへ反映します。
+6. 独立レビューの結果をIssueへ反映します。Task 8でCIを導入した後は、CI結果も反映します。
 
 ## 独立レビュー
 

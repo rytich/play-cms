@@ -43,10 +43,36 @@ describe('repository contract', () => {
     expect(readme).toContain('Node.js 22.13.0系または24以上')
   })
 
+  it('states the current unlicensed repository status without claiming open source', async () => {
+    const readme = await readFile('README.md', 'utf8')
+
+    expect(readme).toContain('ライセンスは未決定')
+    expect(readme).toContain('利用・改変・再配布の許諾はまだ付与していません')
+    expect(readme).not.toContain('オープンソース動画CMS')
+  })
+
   it('links the canonical workflow to its tracking issue', async () => {
     const workflow = await readFile('docs/development/workflow.md', 'utf8')
 
     expect(workflow).toContain('https://github.com/rytich/play-cms/issues/1')
+  })
+
+  it('documents staged build and CI merge gates before Tasks 7 and 8', async () => {
+    const specification = await readFile(
+      'docs/superpowers/specs/2026-09-03-foundation-design.md',
+      'utf8',
+    )
+    const plan = await readFile(
+      'docs/superpowers/plans/2026-09-03-foundation-implementation.md',
+      'utf8',
+    )
+    const contributing = await readFile('CONTRIBUTING.md', 'utf8')
+
+    expect(specification).toContain('Task 7で導入するまでは')
+    expect(specification).toContain('Task 8でCIを導入するまでは')
+    expect(plan).toContain('Task 8でCIを導入するまでは')
+    expect(contributing).toContain('Task 7で導入するまでは')
+    expect(contributing).toContain('Task 8でCIを導入するまでは')
   })
 
   it('keeps the Task 1 plan synchronized with the repository contract', async () => {
