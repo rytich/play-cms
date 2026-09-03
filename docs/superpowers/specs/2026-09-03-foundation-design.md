@@ -3,6 +3,7 @@
 - 状態: 承認済み
 - 作成日: 2026-09-03
 - 関連判断: [ADR 0001](../../decisions/0001-use-lightweight-portable-architecture.md)
+- 基盤実装: [GitHub Issue #1](https://github.com/rytich/play-cms/issues/1)
 
 ## 目的
 
@@ -28,7 +29,7 @@ Filmaと連携する動画CMSの開発基盤を構築する。Cloudflareを推�
 - DB: Drizzle ORM
 - テスト: Vitest、必要なユーザーフローのみPlaywright
 - Cloudflare: Workers、D1、R2、Workers Builds
-- Node.js: Node.js 22 LTS以上、SQLite、ローカルストレージ
+- Node.js: Node.js 22.13.0以上の22.x、または24以上、SQLite、ローカルストレージ
 - 配布: Deploy to Cloudflareボタン、Dockerfile、compose.yaml
 
 Workers Freeでの動作は保証ではなく設計目標とする。CIでWorker成果物サイズを計測し、無料枠の上限変更は公式ドキュメントを基準に判断する。
@@ -170,17 +171,18 @@ DockerfileはNode.jsランタイムで同じHonoアプリを起動する。compo
 
 - 一つのPRは一つの目的に限定し、関連Issueを記載する。
 - 実装は`feature/issue-<番号>-<概要>`ブランチで行い、`develop`へPRを作成する。
-- PR本文に`Closes #<番号>`を記載し、マージ時にIssueを自動で閉じる。
+- PR本文に`Refs #<番号>`を記載し、IssueとPRを相互に参照する。
 - PR作成前に、Issueへ検証コマンドと結果をコメントする。
 - 設計書、ADR、運用文書から関連IssueまたはPRを参照し、Issue・PRから変更文書を参照する。
 - 変更内容、リスク、確認したシナリオ、未確認事項を記載する。
 - 振る舞いの変更にはテストを追加し、文書も同じPRで更新する。
-- `lint`、型検査、単体・統合テスト、両環境のビルドを通す。
+- 各Taskで利用可能な検証を通す。Cloudflare用とNode.js用のビルドをTask 7で導入するまでは、Task固有テストとその時点の`pnpm verify`を必須とする。導入後は両環境のビルドも必須とする。
+- Task 8でCIを導入するまでは、ローカル検証のコマンドと結果をIssueとPRへ記録し、独立レビューをマージ条件とする。導入後はCI成功も必須とする。
 - AIによる変更も人間がレビューし、実行結果をPRへ残す。
 
 ### ラベル
 
-初期ラベルは`type:bug`、`type:feature`、`type:docs`、`area:cloudflare`、`area:docker`、`area:filma`、`area:auth`、`status:needs-design`、`status:ready`、`good first issue`に限定する。ラベルは分類と着手可能性を示し、進捗の詳細はIssue本文とチェックリストで管理する。
+初期のカスタムラベル9件として`type:bug`、`type:feature`、`type:docs`、`area:cloudflare`、`area:docker`、`area:filma`、`area:auth`、`status:needs-design`、`status:ready`を追加し、GitHub既定の`good first issue`を再利用する。新規Issueの種別分類には`type:*`を正本として使用する。ラベルは分類と着手可能性を示し、進捗の詳細はIssue本文とチェックリストで管理する。
 
 ## 最初の実装単位の完了条件
 
@@ -216,8 +218,8 @@ DockerfileはNode.jsランタイムで同じHonoアプリを起動する。compo
 5. Task固有のテストと`pnpm verify`を実行する。
 6. Issueへ検証コマンド、成功・失敗件数、未確認事項をコメントする。
 7. 文書へ関連Issue番号を記載し、コミットする。
-8. `develop`向けPRを作成し、本文に`Closes #<番号>`、変更、リスク、確認結果、文書リンクを記載する。
-9. レビューとCI完了後にマージし、Issueが閉じたことを確認する。
+8. `develop`向けPRを作成し、本文に`Refs #<番号>`、変更、リスク、確認結果、文書リンクを記載する。
+9. 独立レビューと、そのTask時点で利用可能なマージゲートを完了してからマージする。Task 8でCIを導入するまでは記録済みのローカル検証を、導入後はCI成功も確認する。Issueへマージ済みPRをコメントして手動で閉じる。
 
 IssueやPRの更新を省略した実装は完了扱いにしない。
 

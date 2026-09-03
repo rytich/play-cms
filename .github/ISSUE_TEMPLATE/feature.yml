@@ -1,0 +1,40 @@
+name: 機能提案
+description: 新しい機能や振る舞いを提案します
+title: '[Feature]: '
+labels: ['type:feature', 'status:needs-design']
+body:
+  - type: textarea
+    id: purpose
+    attributes:
+      label: 目的
+      description: 解決したい問題を記載してください。
+    validations:
+      required: true
+  - type: textarea
+    id: users
+    attributes:
+      label: 利用者
+      description: この機能を利用する人を記載してください。
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: 完了条件
+      description: 完了を判定できる条件を箇条書きで記載してください。
+    validations:
+      required: true
+  - type: textarea
+    id: out_of_scope
+    attributes:
+      label: 対象外
+      description: 今回実装しない内容を記載してください。
+    validations:
+      required: true
+  - type: textarea
+    id: references
+    attributes:
+      label: 関連文書
+      description: 設計書、ADR、関連Issueを記載してください。
+    validations:
+      required: true

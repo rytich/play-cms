@@ -1,0 +1,24 @@
+name: 文書改善
+description: 文書の不足、誤り、分かりにくさを報告します
+title: '[Docs]: '
+labels: ['type:docs']
+body:
+  - type: input
+    id: location
+    attributes:
+      label: 対象文書
+      description: ファイルパスまたはURLを記載してください。
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: 問題
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: 改善後に期待する状態
+    validations:
+      required: true
