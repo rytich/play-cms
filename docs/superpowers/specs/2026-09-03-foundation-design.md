@@ -1,6 +1,6 @@
 # play-cms 基盤設計
 
-- 状態: レビュー待ち
+- 状態: 承認済み
 - 作成日: 2026-09-03
 - 関連判断: [ADR 0001](../../decisions/0001-use-lightweight-portable-architecture.md)
 

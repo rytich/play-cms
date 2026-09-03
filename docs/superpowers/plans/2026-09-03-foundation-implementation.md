@@ -1,0 +1,544 @@
+# play-cms Foundation Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Cloudflare WorkersとNode.jsの両方で動作し、管理者認証とFilma API接続設定を備えるplay-cmsの第1マイルストーンを構築する。
+
+**Architecture:** Honoの共通アプリケーションをCloudflare WorkerとNode.jsの二つのエントリーポイントから起動する。ユースケースはDB、暗号化、Filma APIをポートとして参照し、D1・SQLiteなどの実装詳細をアダプターへ閉じ込める。React管理画面はViteで静的アセットとしてビルドする。
+
+**Tech Stack:** TypeScript、pnpm、Hono、React、Vite、Drizzle ORM、D1、SQLite、Vitest、Playwright、Wrangler、Docker
+
+**Spec:** `docs/superpowers/specs/2026-09-03-foundation-design.md`
+
+## Global Constraints
+
+- TypeScriptはstrict modeで使用する。
+- Node.jsは22 LTS以上を対象にする。
+- 単一リポジトリ・単一パッケージから開始する。
+- Filma APIキーは平文でDB、ログ、URLへ保存・出力しない。
+- Filma認証は`POST /filmaapi/token`へ`X-Api-Key`ヘッダーで送信する。
+- CloudflareとNode.jsで同じCore、Application、Server、UIを使用する。
+- 振る舞いを追加する前に、失敗するテストを実行して失敗理由を確認する。
+- Issueは作業状態、リポジトリ内文書は確定した設計と運用の正本とする。
+
+---
+
+### Task 1: 開発基盤とリポジトリ運用
+
+**Files:**
+- Create: `package.json`
+- Create: `pnpm-lock.yaml`
+- Create: `tsconfig.json`
+- Create: `vite.config.ts`
+- Create: `vitest.config.ts`
+- Create: `eslint.config.js`
+- Create: `.prettierrc.json`
+- Create: `.gitignore`
+- Create: `src/admin/index.html`
+- Create: `src/admin/main.tsx`
+- Create: `src/server/app.ts`
+- Create: `tests/unit/repository-contract.test.ts`
+- Create: `AGENTS.md`
+- Create: `README.md`
+- Create: `CONTRIBUTING.md`
+- Create: `SECURITY.md`
+- Create: `.github/ISSUE_TEMPLATE/bug.yml`
+- Create: `.github/ISSUE_TEMPLATE/feature.yml`
+- Create: `.github/ISSUE_TEMPLATE/docs.yml`
+- Create: `.github/ISSUE_TEMPLATE/config.yml`
+- Create: `.github/pull_request_template.md`
+- Create: `docs/development/workflow.md`
+
+**Interfaces:**
+- Consumes: `docs/superpowers/specs/2026-09-03-foundation-design.md`
+- Produces: `pnpm test`, `pnpm lint`, `pnpm typecheck`, `pnpm build:ui`と、全作業者が参照する開発規約。
+
+- [ ] **Step 1: テストランナーを導入し、リポジトリ契約の失敗テストを書く**
+
+`package.json`、`tsconfig.json`、`vitest.config.ts`を先に作成し、`pnpm install`でテスト実行に必要な依存関係を固定したうえで、次のテストを書く。この段階の`package.json`には`test: vitest run`だけを定義し、残りのスクリプトはStep 3で追加する。
+
+```ts
+// tests/unit/repository-contract.test.ts
+import { access, readFile } from 'node:fs/promises'
+import { describe, expect, it } from 'vitest'
+
+const requiredFiles = [
+  'AGENTS.md',
+  'CONTRIBUTING.md',
+  'SECURITY.md',
+  '.github/ISSUE_TEMPLATE/bug.yml',
+  '.github/ISSUE_TEMPLATE/feature.yml',
+  '.github/pull_request_template.md',
+]
+
+describe('repository contract', () => {
+  it.each(requiredFiles)('contains %s', async (path) => {
+    await expect(access(path)).resolves.toBeUndefined()
+  })
+
+  it('keeps AGENTS.md as an index to canonical documents', async () => {
+    const agents = await readFile('AGENTS.md', 'utf8')
+    expect(agents).toContain('CONTRIBUTING.md')
+    expect(agents).toContain('docs/development/workflow.md')
+    expect(agents).toContain('pnpm verify')
+  })
+})
+```
+
+- [ ] **Step 2: テストが不足ファイルで失敗することを確認する**
+
+Run: `pnpm exec vitest run tests/unit/repository-contract.test.ts`
+Expected: FAIL。`AGENTS.md`が存在しない旨が表示される。
+
+- [ ] **Step 3: 最小構成と運用文書を作成する**
+
+`package.json`には`dev`、`test`、`lint`、`typecheck`、`build:ui`、`build:worker`、`build:node`、`verify`を定義する。`verify`は`lint && typecheck && test && build:ui && build:worker && build:node`を順番に実行する。
+
+`AGENTS.md`は以下を入口にする。
+
+```md
+# Agent instructions
+
+このファイルはAIエージェント向けの入口です。規則の正本を重複させません。
+
+1. `docs/superpowers/specs/`の承認済み設計を読む。
+2. `docs/superpowers/plans/`の対象計画を読む。
+3. 開発手順とGitHub運用は`CONTRIBUTING.md`と`docs/development/workflow.md`に従う。
+4. 技術判断は`docs/decisions/`を確認する。
+5. 完了報告前に`pnpm verify`を実行し、結果を記録する。
+
+秘密情報をコミット、ログ出力、IssueやPRへ記載しない。公開Issueで脆弱性を報告せず`SECURITY.md`へ誘導する。
+```
+
+Issue Formsではバグに再現手順・期待結果・実際の結果・環境、機能に目的・利用者・完了条件・対象外を必須入力として定義する。PRテンプレートには関連Issue、変更、リスク、確認シナリオ、未確認事項、文書更新を含める。
+
+- [ ] **Step 4: 契約テストと静的検査を通す**
+
+Run: `pnpm exec vitest run tests/unit/repository-contract.test.ts && pnpm lint && pnpm typecheck`
+Expected: PASS。Vitestは全テスト成功、ESLintとTypeScriptはエラー0件。
+
+- [ ] **Step 5: コミットする**
+
+```bash
+git add package.json pnpm-lock.yaml tsconfig.json vite.config.ts vitest.config.ts eslint.config.js .prettierrc.json .gitignore src/admin src/server tests/unit/repository-contract.test.ts AGENTS.md README.md CONTRIBUTING.md SECURITY.md .github docs/development/workflow.md
+git commit -m "chore: initialize play-cms development foundation"
+```
+
+### Task 2: 暗号化と管理者認証のコア
+
+**Files:**
+- Create: `src/core/admin.ts`
+- Create: `src/core/session.ts`
+- Create: `src/application/ports/admin-repository.ts`
+- Create: `src/application/ports/session-repository.ts`
+- Create: `src/application/ports/secret-box.ts`
+- Create: `src/application/ports/password-hasher.ts`
+- Create: `src/application/use-cases/admin-auth.ts`
+- Create: `src/adapters/secrets/web-crypto-secret-box.ts`
+- Create: `src/adapters/secrets/web-crypto-password-hasher.ts`
+- Test: `tests/unit/admin-auth.test.ts`
+- Test: `tests/unit/web-crypto-secrets.test.ts`
+
+**Interfaces:**
+- Consumes: Web Crypto API。
+- Produces: `AdminRepository`、`SessionRepository`、`PasswordHasher`、`SecretBox`、`registerFirstAdmin()`、`loginAdmin()`、`logoutAdmin()`、`updateAdminProfile()`。
+
+- [ ] **Step 1: 初回登録を一度だけ許可する失敗テストを書く**
+
+```ts
+it('registers only the first administrator', async () => {
+  const first = await registerFirstAdmin(deps, {
+    email: 'owner@example.com', name: 'Owner', password: 'correct horse battery staple',
+  })
+  expect(first.email).toBe('owner@example.com')
+  await expect(registerFirstAdmin(deps, {
+    email: 'other@example.com', name: 'Other', password: 'another secure password',
+  })).rejects.toMatchObject({ code: 'ADMIN_ALREADY_EXISTS' })
+})
+```
+
+- [ ] **Step 2: テストが未実装で失敗することを確認する**
+
+Run: `pnpm exec vitest run tests/unit/admin-auth.test.ts`
+Expected: FAIL。`registerFirstAdmin`のexportが存在しない。
+
+- [ ] **Step 3: 認証ユースケースを最小実装する**
+
+```ts
+export interface PasswordHasher {
+  hash(password: string): Promise<string>
+  verify(password: string, encoded: string): Promise<boolean>
+}
+
+export interface SecretBox {
+  encrypt(plainText: string): Promise<string>
+  decrypt(encoded: string): Promise<string>
+}
+```
+
+パスワードはWeb CryptoのPBKDF2-SHA-256、ランダム16 byte salt、600,000 iterationsで導出する。APIキー暗号化はAES-256-GCM、ランダム12 byte IVを使い、保存形式を`v1.<base64url-iv>.<base64url-ciphertext>`に固定する。セッションは32 byteのランダムトークンを発行し、DBにはSHA-256ハッシュだけを保存する。
+
+- [ ] **Step 4: 暗号化と認証のテストを通す**
+
+Run: `pnpm exec vitest run tests/unit/admin-auth.test.ts tests/unit/web-crypto-secrets.test.ts`
+Expected: PASS。誤パスワード、改ざん暗号文、二回目の初期登録も拒否される。
+
+- [ ] **Step 5: コミットする**
+
+```bash
+git add src/core src/application/ports src/application/use-cases src/adapters/secrets tests/unit/admin-auth.test.ts tests/unit/web-crypto-secrets.test.ts
+git commit -m "feat: add administrator authentication core"
+```
+
+### Task 3: 共通スキーマとDBアダプター
+
+**Files:**
+- Create: `src/adapters/database/schema.ts`
+- Create: `src/adapters/database/drizzle-admin-repository.ts`
+- Create: `src/adapters/database/drizzle-session-repository.ts`
+- Create: `src/adapters/database/drizzle-settings-repository.ts`
+- Create: `src/application/ports/settings-repository.ts`
+- Create: `migrations/0001_foundation.sql`
+- Create: `drizzle.config.ts`
+- Test: `tests/integration/database-repositories.test.ts`
+
+**Interfaces:**
+- Consumes: Task 2の`AdminRepository`と`SessionRepository`。
+- Produces: `SettingsRepository`とD1・SQLiteで共有するDrizzleリポジトリ。
+
+- [ ] **Step 1: SQLite上のリポジトリ契約テストを書く**
+
+```ts
+it('persists an encrypted Filma setting without exposing plaintext', async () => {
+  await settings.saveFilmaConnection({
+    apiHost: 'filma.biz', encryptedApiKey: 'v1.iv.cipher', organizationId: 12,
+    apiType: 'fullaccess', checkedAt: new Date('2026-09-03T00:00:00Z'),
+  })
+  expect(await settings.getFilmaConnection()).toMatchObject({
+    apiHost: 'filma.biz', encryptedApiKey: 'v1.iv.cipher', organizationId: 12,
+  })
+  expect(JSON.stringify(await dumpTables(db))).not.toContain('plain-api-key')
+})
+```
+
+- [ ] **Step 2: マイグレーション未作成で失敗することを確認する**
+
+Run: `pnpm exec vitest run tests/integration/database-repositories.test.ts`
+Expected: FAIL。`admins`テーブルが存在しない。
+
+- [ ] **Step 3: SQLとDrizzleリポジトリを実装する**
+
+`0001_foundation.sql`に`admins`、`sessions`、`app_settings`を作る。メールアドレスはunique、セッショントークンハッシュはprimary key、期限と更新日時はUnix秒で保存する。D1とSQLiteの両方で使えるSQLite方言のみを使用する。
+
+- [ ] **Step 4: リポジトリ契約テストを通す**
+
+Run: `pnpm exec vitest run tests/integration/database-repositories.test.ts`
+Expected: PASS。作成・取得・更新・期限切れセッション削除が成功する。
+
+- [ ] **Step 5: コミットする**
+
+```bash
+git add src/adapters/database src/application/ports/settings-repository.ts migrations drizzle.config.ts tests/integration/database-repositories.test.ts
+git commit -m "feat: add portable sqlite repositories"
+```
+
+### Task 4: 管理者HTTP API
+
+**Files:**
+- Modify: `src/server/app.ts`
+- Create: `src/server/dependencies.ts`
+- Create: `src/server/middleware/admin-session.ts`
+- Create: `src/server/middleware/security.ts`
+- Create: `src/server/routes/setup.ts`
+- Create: `src/server/routes/auth.ts`
+- Create: `src/server/routes/profile.ts`
+- Test: `tests/integration/admin-api.test.ts`
+
+**Interfaces:**
+- Consumes: Task 2の認証ユースケース、Task 3のリポジトリ。
+- Produces: `createApp(deps: AppDependencies): Hono`、`POST /api/setup/admin`、`POST /api/auth/login`、`POST /api/auth/logout`、`GET/PATCH /api/admin/profile`。
+
+- [ ] **Step 1: Cookie認証フローの失敗テストを書く**
+
+```ts
+it('logs in and returns the administrator profile', async () => {
+  const login = await app.request('/api/auth/login', {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ email: 'owner@example.com', password: 'secure password 123' }),
+  })
+  expect(login.status).toBe(204)
+  const cookie = login.headers.get('set-cookie')
+  expect(cookie).toContain('play_session=')
+  expect(cookie).toContain('HttpOnly')
+  expect(cookie).toContain('SameSite=Lax')
+  const profile = await app.request('/api/admin/profile', { headers: { cookie: cookie! } })
+  expect(await profile.json()).toMatchObject({ email: 'owner@example.com' })
+})
+```
+
+- [ ] **Step 2: ルート未実装の404を確認する**
+
+Run: `pnpm exec vitest run tests/integration/admin-api.test.ts`
+Expected: FAIL。ログイン応答が404になる。
+
+- [ ] **Step 3: APIとセキュリティ境界を実装する**
+
+JSON入力はZodで検証する。状態変更APIは`Origin`がリクエストURLと同一オリジンであることを確認する。Cookieは`HttpOnly; SameSite=Lax; Path=/`、本番では`Secure`を付ける。全応答に`X-Content-Type-Options: nosniff`、`Referrer-Policy: no-referrer`、`Content-Security-Policy`を付ける。
+
+- [ ] **Step 4: APIテストを通す**
+
+Run: `pnpm exec vitest run tests/integration/admin-api.test.ts`
+Expected: PASS。未認証は401、不正Originは403、初期登録の二回目は409になる。
+
+- [ ] **Step 5: コミットする**
+
+```bash
+git add src/server tests/integration/admin-api.test.ts
+git commit -m "feat: expose secure administrator API"
+```
+
+### Task 5: Filma接続設定
+
+**Files:**
+- Create: `src/application/ports/filma-client.ts`
+- Create: `src/application/use-cases/configure-filma.ts`
+- Create: `src/adapters/filma/http-filma-client.ts`
+- Create: `src/server/routes/filma-settings.ts`
+- Modify: `src/server/app.ts`
+- Test: `tests/unit/configure-filma.test.ts`
+- Test: `tests/integration/http-filma-client.test.ts`
+- Test: `tests/integration/filma-settings-api.test.ts`
+
+**Interfaces:**
+- Consumes: `SecretBox`、`SettingsRepository`、Filma API `POST /filmaapi/token`。
+- Produces: `FilmaClient.verifyApiKey()`、`configureFilma()`、`GET/PUT /api/admin/filma-settings`。
+
+- [ ] **Step 1: APIキーが保存前に検証・暗号化される失敗テストを書く**
+
+```ts
+it('verifies and encrypts the API key before saving', async () => {
+  await configureFilma(deps, { apiHost: 'filma.biz', apiKey: 'secret-key' })
+  expect(filma.requests[0]).toEqual({ apiHost: 'filma.biz', apiKey: 'secret-key' })
+  expect(settings.saved).toMatchObject({
+    apiHost: 'filma.biz', encryptedApiKey: 'encrypted:secret-key',
+    organizationId: 42, apiType: 'fullaccess',
+  })
+  expect(JSON.stringify(settings.saved)).not.toContain('"apiKey":"secret-key"')
+})
+```
+
+- [ ] **Step 2: ユースケース未実装で失敗することを確認する**
+
+Run: `pnpm exec vitest run tests/unit/configure-filma.test.ts`
+Expected: FAIL。`configureFilma`のexportが存在しない。
+
+- [ ] **Step 3: Filmaクライアントと設定APIを実装する**
+
+```ts
+export type FilmaConnection = {
+  organizationId: number
+  apiType: 'readonly' | 'fullaccess'
+}
+
+export interface FilmaClient {
+  verifyApiKey(input: { apiHost: string; apiKey: string }): Promise<FilmaConnection>
+}
+```
+
+クライアントは`https://${apiHost}/filmaapi/token`へPOSTし、`X-Api-Key`と`Content-Type: application/json`を送る。200のみ成功とし、401を`INVALID_API_KEY`、403を`DOMAIN_NOT_ALLOWED`、その他の4xx・5xxとネットワーク失敗を`FILMA_UNAVAILABLE`へ変換する。応答から`organization_id`と`api_type`だけを返し、JWTは保持しない。
+
+- [ ] **Step 4: 単体・HTTP・APIテストを通す**
+
+Run: `pnpm exec vitest run tests/unit/configure-filma.test.ts tests/integration/http-filma-client.test.ts tests/integration/filma-settings-api.test.ts`
+Expected: PASS。APIキーがURL、レスポンス、保存データ、エラー文字列へ現れない。
+
+- [ ] **Step 5: コミットする**
+
+```bash
+git add src/application/ports/filma-client.ts src/application/use-cases/configure-filma.ts src/adapters/filma src/server tests/unit/configure-filma.test.ts tests/integration/http-filma-client.test.ts tests/integration/filma-settings-api.test.ts
+git commit -m "feat: add encrypted Filma connection settings"
+```
+
+### Task 6: 管理画面
+
+**Files:**
+- Modify: `src/admin/main.tsx`
+- Create: `src/admin/app.tsx`
+- Create: `src/admin/api.ts`
+- Create: `src/admin/pages/setup-page.tsx`
+- Create: `src/admin/pages/login-page.tsx`
+- Create: `src/admin/pages/profile-page.tsx`
+- Create: `src/admin/pages/filma-settings-page.tsx`
+- Create: `src/admin/styles.css`
+- Test: `tests/unit/admin-app.test.tsx`
+- Test: `tests/e2e/admin-onboarding.spec.ts`
+
+**Interfaces:**
+- Consumes: Task 4とTask 5のHTTP API。
+- Produces: `/admin`の初期登録、ログイン、プロフィール、Filma設定画面。
+
+- [ ] **Step 1: APIキーを再表示しないUIテストを書く**
+
+```tsx
+it('shows connection metadata without rendering the saved API key', async () => {
+  render(<FilmaSettingsPage api={fakeApi({
+    configured: true, apiHost: 'filma.biz', organizationId: 42,
+    apiType: 'fullaccess', checkedAt: '2026-09-03T00:00:00.000Z',
+  })} />)
+  expect(await screen.findByText('接続済み')).toBeVisible()
+  expect(screen.getByText('組織ID: 42')).toBeVisible()
+  expect(screen.queryByDisplayValue('secret-key')).not.toBeInTheDocument()
+})
+```
+
+- [ ] **Step 2: UI未実装で失敗することを確認する**
+
+Run: `pnpm exec vitest run tests/unit/admin-app.test.tsx`
+Expected: FAIL。`FilmaSettingsPage`が存在しない。
+
+- [ ] **Step 3: 四つの管理画面を実装する**
+
+画面文言は日本語にする。APIエラーは項目エラー、認証失敗、Filma認証失敗、Filma一時障害に分ける。送信中はボタンを無効化し、成功後にパスワードやAPIキー入力を空にする。APIキー欄は常に空欄で、新しい値を保存すると置換されることを表示する。
+
+- [ ] **Step 4: UI単体テストとオンボーディングE2Eを通す**
+
+Run: `pnpm exec vitest run tests/unit/admin-app.test.tsx && pnpm exec playwright test tests/e2e/admin-onboarding.spec.ts`
+Expected: PASS。初期登録からFilma接続済み表示まで完了する。
+
+- [ ] **Step 5: コミットする**
+
+```bash
+git add src/admin tests/unit/admin-app.test.tsx tests/e2e/admin-onboarding.spec.ts
+git commit -m "feat: add administrator onboarding UI"
+```
+
+### Task 7: CloudflareとDockerの配布構成
+
+**Files:**
+- Create: `src/entrypoints/cloudflare.ts`
+- Create: `src/entrypoints/node.ts`
+- Create: `src/runtime/cloudflare-dependencies.ts`
+- Create: `src/runtime/node-dependencies.ts`
+- Create: `wrangler.jsonc`
+- Create: `.dev.vars.example`
+- Create: `Dockerfile`
+- Create: `compose.yaml`
+- Create: `deploy/docker/entrypoint.sh`
+- Create: `scripts/check-worker-size.mjs`
+- Create: `tests/unit/runtime-config.test.ts`
+- Create: `docs/operations/cloudflare.md`
+- Create: `docs/operations/docker.md`
+- Modify: `README.md`
+
+**Interfaces:**
+- Consumes: `createApp(deps)`、D1・SQLiteリポジトリ、Worker secrets。
+- Produces: Workerエントリーポイント、Node.jsサーバー、Deploy to Cloudflareボタン、Docker起動手順。
+
+- [ ] **Step 1: 必須設定と秘密値非混入の失敗テストを書く**
+
+```ts
+it('rejects missing application secrets', () => {
+  expect(() => parseRuntimeConfig({})).toThrow('PLAY_SESSION_SECRET is required')
+})
+
+it('keeps real secrets out of example files', async () => {
+  const example = await readFile('.dev.vars.example', 'utf8')
+  expect(example).toContain('PLAY_SESSION_SECRET=replace-with-32-random-bytes')
+  expect(example).not.toMatch(/[A-Fa-f0-9]{64}/)
+})
+```
+
+- [ ] **Step 2: ランタイム設定未実装で失敗することを確認する**
+
+Run: `pnpm exec vitest run tests/unit/runtime-config.test.ts`
+Expected: FAIL。`parseRuntimeConfig`が存在しない。
+
+- [ ] **Step 3: CloudflareとDockerの起動構成を実装する**
+
+`wrangler.jsonc`にはD1 binding `DB`、R2 binding `MEDIA`、assets binding `ASSETS`を定義する。`.dev.vars.example`には`PLAY_SESSION_SECRET`、`PLAY_ENCRYPTION_KEY`、`FILMA_API_HOST=filma.biz`を記載する。`package.json.cloudflare.bindings`で二つのsecret生成方法を説明する。READMEのボタンは次を使う。
+
+```md
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/rytich/play-cms)
+```
+
+Dockerは非rootユーザーでNode.jsサーバーを起動し、`/data/play-cms.sqlite`と`/data/media`を永続化する。entrypointはマイグレーション成功後だけサーバーを起動する。
+
+- [ ] **Step 4: 両ランタイムのテストとビルドを通す**
+
+Run: `pnpm exec vitest run tests/unit/runtime-config.test.ts && pnpm build:ui && pnpm build:worker && pnpm build:node && docker build -t play-cms:test .`
+Expected: PASS。三つのビルドとDockerイメージ作成がexit 0になる。
+
+- [ ] **Step 5: Workerサイズを確認する**
+
+Run: `pnpm check:worker-size`
+Expected: PASS。圧縮後Workerが3,000,000 byte未満で、実測値が出力される。
+
+- [ ] **Step 6: コミットする**
+
+```bash
+git add src/entrypoints src/runtime wrangler.jsonc .dev.vars.example Dockerfile compose.yaml deploy scripts tests/unit/runtime-config.test.ts docs/operations README.md package.json pnpm-lock.yaml
+git commit -m "feat: add Cloudflare and Docker deployment targets"
+```
+
+### Task 8: CIと最終文書
+
+**Files:**
+- Create: `.github/workflows/ci.yml`
+- Create: `docs/architecture/overview.md`
+- Create: `docs/product/foundation.md`
+- Modify: `CONTRIBUTING.md`
+- Modify: `README.md`
+- Create: `tests/helpers/markdown-links.ts`
+- Test: `tests/unit/documentation-links.test.ts`
+
+**Interfaces:**
+- Consumes: Tasks 1-7の検証コマンドと文書。
+- Produces: 全PRで実行されるCI、利用者・開発者向けの正本文書。
+
+- [ ] **Step 1: ローカルMarkdownリンクの失敗テストを書く**
+
+```ts
+import { findBrokenLocalMarkdownLinks } from '../helpers/markdown-links'
+
+it('resolves every local Markdown link', async () => {
+  const failures = await findBrokenLocalMarkdownLinks(['README.md', 'CONTRIBUTING.md', 'docs'])
+  expect(failures).toEqual([])
+})
+```
+
+- [ ] **Step 2: リンク検証ヘルパー未実装で失敗することを確認する**
+
+Run: `pnpm exec vitest run tests/unit/documentation-links.test.ts`
+Expected: FAIL。`findBrokenLocalMarkdownLinks`が存在しない。
+
+- [ ] **Step 3: リンク検証、CI、正本文書を完成させる**
+
+`findBrokenLocalMarkdownLinks(paths: string[]): Promise<string[]>`は指定されたMarkdownファイルとディレクトリを再帰的に読み、HTTP URLとページ内アンカーを除く相対リンクについて、リンク元から解決したファイルが存在しない場合に`<source> -> <target>`を返す。
+
+CIはNode.js 22とpnpm lockfileを使い、`pnpm install --frozen-lockfile`、`pnpm verify`、`pnpm check:worker-size`を実行する。`overview.md`にはコンポーネント境界とCloudflare／Node.jsの依存方向、`foundation.md`には提供機能と対象外、READMEにはCloudflareとDockerの最短導入手順を記載する。
+
+- [ ] **Step 4: 全検証を実行する**
+
+Run: `pnpm verify && pnpm check:worker-size && docker build -t play-cms:test .`
+Expected: PASS。lint、型検査、全Vitest、UI・Worker・Nodeビルド、Workerサイズ、Dockerビルドがすべてexit 0になる。
+
+- [ ] **Step 5: 作業ツリーを確認する**
+
+Run: `git status --short`
+Expected: Task 8で意図したファイルだけが変更または追加として表示される。
+
+- [ ] **Step 6: コミットする**
+
+```bash
+git add .github/workflows/ci.yml docs/architecture/overview.md docs/product/foundation.md CONTRIBUTING.md README.md tests/helpers/markdown-links.ts tests/unit/documentation-links.test.ts
+git commit -m "ci: verify portable play-cms foundation"
+```
+
+## 計画完了時の確認
+
+- `pnpm verify`が成功している。
+- `pnpm check:worker-size`が圧縮後3,000,000 byte未満を報告している。
+- `docker build -t play-cms:test .`が成功している。
+- 管理者初期登録、ログイン、プロフィール更新、Filma接続設定のE2Eが成功している。
+- APIキーがDB平文、URL、ログ、APIレスポンス、画面へ現れない。
+- README、AGENTS.md、CONTRIBUTING.md、SECURITY.md、Issue Forms、PRテンプレート、設計・運用文書が揃っている。
