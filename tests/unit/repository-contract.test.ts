@@ -231,4 +231,20 @@ describe('repository contract', () => {
       expect(policy).toContain('チェック0件は成功扱いにしない')
     }
   })
+
+  it('requires at least one approving review in the Task 8 ruleset', async () => {
+    const policyPaths = [
+      '.agents/skills/play-cms-reviewer/SKILL.md',
+      'CONTRIBUTING.md',
+      'docs/development/workflow.md',
+      'docs/superpowers/specs/2026-09-03-foundation-design.md',
+      'docs/superpowers/plans/2026-09-03-foundation-implementation.md',
+    ]
+
+    for (const path of policyPaths) {
+      const policy = await readFile(path, 'utf8')
+
+      expect(policy).toContain('required_approving_review_count: 1')
+    }
+  })
 })

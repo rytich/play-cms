@@ -49,7 +49,7 @@ After verification, the coordinator may act as the separately authenticated `knr
 - `Ready with minor follow-up`: post the review summary as `COMMENT`; do not approve automatically.
 - `Not ready`: post the review summary and submit `REQUEST_CHANGES`.
 
-Before Task 8 introduces CI, automatic approval requires the exact-head local verification mandated by repository policy to be recorded and successful. Automatic merge is disabled until the Task 8 ruleset is active. That active ruleset must dismiss stale approvals, require the branch to be up to date, require the expected CI checks, and deny the automation identity any bypass. After Task 8, all expected CI checks for the reviewed head are present and successful; zero checks is a failure, regardless of whether branch protection marks additional checks as required.
+Before Task 8 introduces CI, automatic approval requires the exact-head local verification mandated by repository policy to be recorded and successful. Automatic merge is disabled until the Task 8 ruleset is active. That active ruleset must set `required_approving_review_count: 1`, dismiss stale approvals, require the branch to be up to date, require the expected CI checks, and deny the automation identity any bypass. After Task 8, all expected CI checks for the reviewed head are present and successful; zero checks is a failure, regardless of whether branch protection marks additional checks as required.
 
 Record the reviewed range as `baseRefOid=<reviewed-base-sha>` and `headRefOid=<reviewed-head-sha>`. Re-fetch and compare both values immediately before approval and merge. If either changes, synchronize the branch, repeat the applicable verification, and require a new independent review.
 
