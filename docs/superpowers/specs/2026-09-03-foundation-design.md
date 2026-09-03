@@ -177,8 +177,8 @@ DockerfileはNode.jsランタイムで同じHonoアプリを起動する。compo
 - 変更内容、リスク、確認したシナリオ、未確認事項を記載する。
 - 振る舞いの変更にはテストを追加し、文書も同じPRで更新する。
 - 各Taskで利用可能な検証を通す。Cloudflare用とNode.js用のビルドをTask 7で導入するまでは、Task固有テストとその時点の`pnpm verify`を必須とする。導入後は両環境のビルドも必須とする。
-- Task 8でCIを導入するまでは、ローカル検証のコマンドと結果をIssueとPRへ記録し、独立レビューをマージ条件とする。導入後はrequired指定の有無にかかわらずreview対象headのCIチェックが存在し、すべて成功していることを必須とし、チェック0件は成功扱いにしない。
-- AIによる変更も独立レビューし、実行結果をPRへ残す。規約の条件を満たす場合は`knryt`として自動Approve・自動Mergeできる。`gh pr merge <pr-number> --merge --match-head-commit <reviewed-head-sha>`でmerge commit方式を固定し、review後のhead変更を原子的に拒否する。
+- Task 8でCIを導入するまでは、ローカル検証のコマンドと結果をIssueとPRへ記録し、独立レビューをマージ条件とする。Task 8のruleset有効化前は自動Mergeを禁止する。導入後はrulesetでstale Approve無効化、branch最新化、CI必須化、`knryt`のbypass禁止を強制し、required指定の有無にかかわらずreview対象headのCIチェックが存在し、すべて成功していることを必須とする。チェック0件は成功扱いにしない。
+- AIによる変更も独立レビューし、実行結果をPRへ残す。review対象rangeを`baseRefOid=<reviewed-base-sha>`と`headRefOid=<reviewed-head-sha>`で記録し、Approve・Merge直前に両方を確認する。変更時はbranch同期、検証、新しい独立レビューを要求する。規約の条件を満たす場合は`knryt`として自動Approve・自動Mergeできる。Approveは`gh api --method POST repos/<owner>/<repo>/pulls/<pr-number>/reviews -f event=APPROVE -f commit_id=<reviewed-head-sha> -f body='<review-summary>'`でreview済みcommitへ拘束し、返却`commit_id`を検証する。Mergeは`gh pr merge <pr-number> --merge --match-head-commit <reviewed-head-sha>`でmerge commit方式を固定し、review後のhead変更を原子的に拒否する。
 
 ### ラベル
 

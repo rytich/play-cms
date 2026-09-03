@@ -602,12 +602,12 @@ Expected: FAIL。`findBrokenLocalMarkdownLinks`が存在しない。
 
 `findBrokenLocalMarkdownLinks(paths: string[]): Promise<string[]>`は指定されたMarkdownファイルとディレクトリを再帰的に読み、HTTP URLとページ内アンカーを除く相対リンクについて、リンク元から解決したファイルが存在しない場合に`<source> -> <target>`を返す。
 
-CIはNode.js 22とpnpm lockfileを使い、`pnpm install --frozen-lockfile`、`pnpm verify`、`pnpm check:worker-size`を実行する。`overview.md`にはコンポーネント境界とCloudflare／Node.jsの依存方向、`foundation.md`には提供機能と対象外、READMEにはCloudflareとDockerの最短導入手順を記載する。
+CIはNode.js 22とpnpm lockfileを使い、`pnpm install --frozen-lockfile`、`pnpm verify`、`pnpm check:worker-size`を実行する。CI成功後に`develop`へactive rulesetを設定し、`Dismiss stale pull request approvals`、`Require branches to be up to date before merging`、CIジョブの`required status checks`、merge commit方式を必須化する。`knryt`を含む自動実行者へbypassを付与しない。GitHub APIでrulesetがactiveであり、対象ルールとrequired checkが実際に適用されることを確認する。`overview.md`にはコンポーネント境界とCloudflare／Node.jsの依存方向、`foundation.md`には提供機能と対象外、READMEにはCloudflareとDockerの最短導入手順を記載する。
 
 - [ ] **Step 4: 全検証を実行する**
 
 Run: `pnpm verify && pnpm check:worker-size && docker build -t play-cms:test .`
-Expected: PASS。lint、型検査、全Vitest、UI・Worker・Nodeビルド、Workerサイズ、Dockerビルドがすべてexit 0になる。
+Expected: PASS。lint、型検査、全Vitest、UI・Worker・Nodeビルド、Workerサイズ、Dockerビルドがすべてexit 0になる。加えてGitHub APIで`develop`のactive ruleset、stale Approve無効化、branch最新化、CIのrequired status checks、merge commit方式、bypassなしを確認する。
 
 - [ ] **Step 5: 作業ツリーを確認する**
 

@@ -153,4 +153,82 @@ describe('repository contract', () => {
       )
     }
   })
+
+  it('binds automated approvals to the exact reviewed commit', async () => {
+    const policyPaths = [
+      '.agents/skills/play-cms-reviewer/SKILL.md',
+      'CONTRIBUTING.md',
+      'docs/development/workflow.md',
+      'docs/superpowers/specs/2026-09-03-foundation-design.md',
+    ]
+
+    for (const path of policyPaths) {
+      const policy = await readFile(path, 'utf8')
+
+      expect(policy).toContain('commit_id=<reviewed-head-sha>')
+    }
+  })
+
+  it('preserves the exact reviewed base and head pair', async () => {
+    const policyPaths = [
+      '.agents/skills/play-cms-reviewer/SKILL.md',
+      'CONTRIBUTING.md',
+      'docs/development/workflow.md',
+      'docs/superpowers/specs/2026-09-03-foundation-design.md',
+    ]
+
+    for (const path of policyPaths) {
+      const policy = await readFile(path, 'utf8')
+
+      expect(policy).toContain('baseRefOid=<reviewed-base-sha>')
+      expect(policy).toContain('headRefOid=<reviewed-head-sha>')
+    }
+  })
+
+  it('disables automated merge until the Task 8 ruleset is active', async () => {
+    const reviewerSkill = await readFile(
+      '.agents/skills/play-cms-reviewer/SKILL.md',
+      'utf8',
+    )
+    const japanesePolicyPaths = [
+      'CONTRIBUTING.md',
+      'docs/development/workflow.md',
+      'docs/superpowers/specs/2026-09-03-foundation-design.md',
+    ]
+    const plan = await readFile(
+      'docs/superpowers/plans/2026-09-03-foundation-implementation.md',
+      'utf8',
+    )
+
+    expect(reviewerSkill).toContain(
+      'Automatic merge is disabled until the Task 8 ruleset is active',
+    )
+    for (const path of japanesePolicyPaths) {
+      const policy = await readFile(path, 'utf8')
+
+      expect(policy).toContain('Task 8のruleset有効化前は自動Mergeを禁止')
+    }
+    expect(plan).toContain('Dismiss stale pull request approvals')
+    expect(plan).toContain('Require branches to be up to date before merging')
+    expect(plan).toContain('required status checks')
+  })
+
+  it('treats zero CI checks as a failed merge gate', async () => {
+    const reviewerSkill = await readFile(
+      '.agents/skills/play-cms-reviewer/SKILL.md',
+      'utf8',
+    )
+    const japanesePolicyPaths = [
+      'CONTRIBUTING.md',
+      'docs/development/workflow.md',
+      'docs/superpowers/specs/2026-09-03-foundation-design.md',
+    ]
+
+    expect(reviewerSkill).toContain('zero checks is a failure')
+    for (const path of japanesePolicyPaths) {
+      const policy = await readFile(path, 'utf8')
+
+      expect(policy).toContain('チェック0件は成功扱いにしない')
+    }
+  })
 })
