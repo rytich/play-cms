@@ -515,6 +515,8 @@ git commit -m "feat: add administrator onboarding UI"
 - Create: `deploy/docker/entrypoint.sh`
 - Create: `scripts/check-worker-size.mjs`
 - Create: `tests/unit/runtime-config.test.ts`
+- Verify: `src/adapters/filma/live-contract.ts`
+- Test: `tests/unit/filma-live-contract.test.ts`
 - Create: `docs/operations/cloudflare.md`
 - Create: `docs/operations/docker.md`
 - Modify: `README.md`
@@ -547,7 +549,7 @@ Expected: FAIL。`parseRuntimeConfig`が存在しない。
 
 - [ ] **Step 3: CloudflareとDockerの起動構成を実装する**
 
-`wrangler.jsonc`にはD1 binding `DB`、R2 binding `MEDIA`、assets binding `ASSETS`を定義する。`.dev.vars.example`のruntime欄には`PLAY_SESSION_SECRET`と`PLAY_ENCRYPTION_KEY`のダミー値を記載し、live test専用欄には`FILMA_LIVE_API_KEY=replace-with-dedicated-test-key`を残す。本番ランタイムは`FILMA_LIVE_API_KEY`を読まず、live testを含むFilma送信先は`https://filma.biz/filmaapi/token`へ固定する。`FILMA_API_HOST`は定義せず、管理画面や環境変数から送信先を変更させない。`package.json.cloudflare.bindings`で二つのruntime secret生成方法を説明する。READMEのボタンは次を使う。
+`wrangler.jsonc`にはD1 binding `DB`、R2 binding `MEDIA`、assets binding `ASSETS`を定義する。`.dev.vars.example`のruntime欄には`PLAY_SESSION_SECRET`と`PLAY_ENCRYPTION_KEY`のダミー値を記載し、live test専用欄には`FILMA_LIVE_API_KEY=replace-with-dedicated-test-key`を残す。本番ランタイムは`FILMA_LIVE_API_KEY`を読まず、Issue #6で導入したlive testを含むFilma送信先は`https://filma.biz/filmaapi/token`へ固定する。`FILMA_API_HOST`は定義せず、管理画面や環境変数から送信先を変更させない。live testも5秒のタイムアウト、64 KiBの応答上限、自動再試行しない契約を維持する。`package.json.cloudflare.bindings`で二つのruntime secret生成方法を説明する。READMEのボタンは次を使う。
 
 ```md
 [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/rytich/play-cms)
@@ -557,8 +559,8 @@ Dockerは非rootユーザーでNode.jsサーバーを起動し、`/data/play-cms
 
 - [ ] **Step 4: 両ランタイムのテストとビルドを通す**
 
-Run: `pnpm exec vitest run tests/unit/runtime-config.test.ts && pnpm build:ui && pnpm build:worker && pnpm build:node && docker build -t play-cms:test .`
-Expected: PASS。三つのビルドとDockerイメージ作成がexit 0になる。
+Run: `pnpm exec vitest run tests/unit/filma-live-contract.test.ts tests/unit/runtime-config.test.ts && pnpm build:ui && pnpm build:worker && pnpm build:node && docker build -t play-cms:test .`
+Expected: PASS。live test契約が固定送信先、5秒のタイムアウト、chunkedを含む64 KiBの応答上限、失敗時に自動再試行しないことを防御テストで確認する。三つのビルドとDockerイメージ作成がexit 0になる。
 
 - [ ] **Step 5: Workerサイズを確認する**
 

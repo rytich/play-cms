@@ -129,6 +129,14 @@ describe('repository contract', () => {
     expect(task6).not.toContain('apiHost:')
     expect(task7).toContain('`FILMA_API_HOST`は定義せず')
     expect(task7).toContain('FILMA_LIVE_API_KEY')
+    for (const liveContractRequirement of [
+      'tests/unit/filma-live-contract.test.ts',
+      '5秒',
+      '64 KiB',
+      '自動再試行しない',
+    ]) {
+      expect(task7).toContain(liveContractRequirement)
+    }
   })
 
   it('discovers unit and integration TypeScript tests', async () => {
