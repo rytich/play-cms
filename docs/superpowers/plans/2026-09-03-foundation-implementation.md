@@ -408,12 +408,12 @@ export interface FilmaClient {
 }
 ```
 
-管理画面と設定APIはAPIキーだけを受け取り、送信先を変更させない。ランタイムはFilmaクライアントを信頼済みの固定URL`https://filma.biz/filmaapi/token`で構築する。クライアントは`X-Api-Key`と`Content-Type: application/json`を送信し、`redirect: 'error'`でリダイレクトを拒否する。タイムアウトは5秒、応答は64 KiBを上限とし、自動再試行しない。200のみ成功とし、401を`INVALID_API_KEY`、403を`DOMAIN_NOT_ALLOWED`、その他の4xx・5xx、タイムアウト、応答上限超過、ネットワーク失敗を`FILMA_UNAVAILABLE`へ変換する。応答から`organization_id`と`api_type`だけを返し、JWTは保持しない。
+管理画面と設定APIはAPIキーだけを受け取り、送信先を変更させない。ランタイムはFilmaクライアントを信頼済みの固定URL`https://filma.biz/filmaapi/token`で構築する。クライアントは`X-Api-Key`と`Content-Type: application/json`を送信し、`redirect: 'error'`でリダイレクトを拒否する。レスポンス本文の読取を含む通信全体のタイムアウトは5秒、応答は64 KiBを上限とし、自動再試行しない。非200、上限超過、本文読取失敗を含む終了経路で通信を中断する。200のみ成功とし、401を`INVALID_API_KEY`、403を`DOMAIN_NOT_ALLOWED`、その他の4xx・5xx、タイムアウト、応答上限超過、ネットワーク失敗を`FILMA_UNAVAILABLE`へ変換する。応答から`organization_id`と`api_type`だけを返し、JWTは保持しない。
 
 - [ ] **Step 4: 単体・HTTP・APIテストを通す**
 
 Run: `pnpm exec vitest run tests/unit/configure-filma.test.ts tests/integration/http-filma-client.test.ts tests/integration/filma-settings-api.test.ts`
-Expected: PASS。APIキーがURL、レスポンス、保存データ、エラー文字列へ現れない。設定APIが送信先を受け付けず、リダイレクト、5秒超過、64 KiB超過を拒否し、失敗時に自動再試行しないことも確認する。
+Expected: PASS。APIキーがURL、レスポンス、保存データ、エラー文字列へ現れない。設定APIが送信先を受け付けず、リダイレクト、本文読取を含む5秒超過、Content-Lengthとchunkedの64 KiB超過を拒否し、非200を含む終了経路で通信を中断し、失敗時に自動再試行しないことも確認する。
 
 - [ ] **Step 5: コミットする**
 

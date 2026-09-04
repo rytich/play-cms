@@ -20,13 +20,13 @@ Filmaクライアントを推測で実装しないため、専用テスト組織
 pnpm test:filma:live
 ```
 
-このコマンドだけが`POST https://filma.biz/filmaapi/token`を1回実行します。自動再試行はせず、リダイレクトは拒否し、5秒で通信を中断します。応答本文はストリームの実測で64 KiBを上限とし、`Content-Length`がない場合や実際の本文サイズと異なる場合も上限を適用します。200応答では`organization_id`と`api_type`の存在と型を検証し、出力にはHTTPステータスと確認した項目名だけを表示します。APIキー、JWT、組織ID、認証ヘッダー、レスポンス本文は表示しません。
+このコマンドだけが`POST https://filma.biz/filmaapi/token`を1回実行します。自動再試行はせず、リダイレクトは拒否し、レスポンス本文の読取を含む通信全体を5秒で中断します。応答本文はストリームの実測で64 KiBを上限とし、`Content-Length`がない場合や実際の本文サイズと異なる場合も上限を適用します。非200、上限超過、本文読取失敗を含む終了経路で通信を中断します。200応答では`organization_id`と`api_type`の存在と型を検証し、出力にはHTTPステータスと確認した項目名だけを表示します。APIキー、JWT、組織ID、認証ヘッダー、レスポンス本文は表示しません。
 
 ## エラー分類
 
 - `INVALID_API_KEY`: HTTP 401
 - `DOMAIN_NOT_ALLOWED`: HTTP 403
-- `FILMA_UNAVAILABLE`: その他のHTTPエラー、ネットワーク障害、5秒のタイムアウト、64 KiBの応答上限超過
+- `FILMA_UNAVAILABLE`: その他のHTTPエラー、接続中または本文読取中のネットワーク障害、5秒のタイムアウト、64 KiBの応答上限超過
 - `INVALID_RESPONSE_SCHEMA`: HTTP 200だが期待するJSON契約を満たさない
 - `MISSING_CONFIGURATION`: 必須のローカル設定がない
 

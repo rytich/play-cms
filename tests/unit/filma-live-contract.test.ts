@@ -97,6 +97,7 @@ describe('Filma live token contract', () => {
     async (status, code) => {
       const secretBody = 'response-body-that-must-not-leak'
       let bodyRead = false
+      let requestSignal: AbortSignal | null | undefined
       const response = new Response(secretBody, { status })
       const originalText = response.text.bind(response)
       response.text = () => {
@@ -108,12 +109,17 @@ describe('Filma live token contract', () => {
         return Promise.resolve({ token: secretBody })
       }
 
-      const operation = verifyFilmaTokenContract({ apiKey: 'test-key' }, () =>
-        Promise.resolve(response),
+      const operation = verifyFilmaTokenContract(
+        { apiKey: 'test-key' },
+        (_input, init) => {
+          requestSignal = init.signal
+          return Promise.resolve(response)
+        },
       )
 
       await expect(operation).rejects.toEqual(new FilmaContractError(code))
       expect(bodyRead).toBe(false)
+      expect(requestSignal?.aborted).toBe(true)
     },
   )
 
@@ -151,7 +157,7 @@ describe('Filma live token contract', () => {
     )
 
     await expect(operation).rejects.toEqual(
-      new FilmaContractError('INVALID_RESPONSE_SCHEMA'),
+      new FilmaContractError('FILMA_UNAVAILABLE'),
     )
     await operation.catch((error: unknown) => {
       expect(String(error)).not.toContain(responseBody)
@@ -209,6 +215,67 @@ describe('Filma live token contract', () => {
       new FilmaContractError('FILMA_UNAVAILABLE'),
     )
     expect(attempts).toBe(1)
+  })
+
+  it('cancels a response whose declared length exceeds 64 KiB', async () => {
+    let canceled = false
+    let requestSignal: AbortSignal | null | undefined
+    const response = new Response(
+      new ReadableStream({
+        cancel() {
+          canceled = true
+        },
+      }),
+      {
+        status: 200,
+        headers: { 'content-length': String(64 * 1024 + 1) },
+      },
+    )
+
+    const operation = verifyFilmaTokenContract(
+      { apiKey: 'test-key' },
+      (_input, init) => {
+        requestSignal = init.signal
+        return Promise.resolve(response)
+      },
+    )
+
+    await expect(operation).rejects.toEqual(
+      new FilmaContractError('FILMA_UNAVAILABLE'),
+    )
+    expect(canceled).toBe(true)
+    expect(requestSignal?.aborted).toBe(true)
+  })
+
+  it('aborts a stalled response body after five seconds without retrying', async () => {
+    vi.useFakeTimers()
+    let attempts = 0
+    let canceled = false
+
+    const operation = verifyFilmaTokenContract({ apiKey: 'test-key' }, () => {
+      attempts += 1
+      return Promise.resolve(
+        new Response(
+          new ReadableStream({
+            start(controller) {
+              controller.enqueue(new TextEncoder().encode('{'))
+            },
+            cancel() {
+              canceled = true
+            },
+          }),
+          { status: 200 },
+        ),
+      )
+    })
+    const rejection = expect(operation).rejects.toEqual(
+      new FilmaContractError('FILMA_UNAVAILABLE'),
+    )
+
+    await vi.advanceTimersByTimeAsync(5_000)
+    await rejection
+    expect(attempts).toBe(1)
+    expect(canceled).toBe(true)
   })
 
   it('maps a null successful response to a sanitized schema error', async () => {
