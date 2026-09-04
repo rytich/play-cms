@@ -23,9 +23,122 @@ describe('repository contract', () => {
     const agents = await readFile('AGENTS.md', 'utf8')
 
     expect(agents).toContain('CONTRIBUTING.md')
+    expect(agents).toContain('SECURITY.md')
     expect(agents).toContain('docs/development/workflow.md')
     expect(agents).toContain('pnpm verify')
     expect(agents).toContain('.agents/skills/play-cms-reviewer/SKILL.md')
+  })
+
+  it('requires security simplicity evidence in every pull request', async () => {
+    const security = await readFile('SECURITY.md', 'utf8')
+    const pullRequestTemplate = await readFile(
+      '.github/pull_request_template.md',
+      'utf8',
+    )
+    const specification = await readFile(
+      'docs/superpowers/specs/2026-09-03-foundation-design.md',
+      'utf8',
+    )
+    const plan = await readFile(
+      'docs/superpowers/plans/2026-09-03-foundation-implementation.md',
+      'utf8',
+    )
+    const task4 = plan.slice(
+      plan.indexOf('### Task 4:'),
+      plan.indexOf('### Task 5:'),
+    )
+    const task3 = plan.slice(
+      plan.indexOf('### Task 3:'),
+      plan.indexOf('### Task 4:'),
+    )
+    const task5 = plan.slice(
+      plan.indexOf('### Task 5:'),
+      plan.indexOf('### Task 6:'),
+    )
+    const task6 = plan.slice(
+      plan.indexOf('### Task 6:'),
+      plan.indexOf('### Task 7:'),
+    )
+    const task7 = plan.slice(
+      plan.indexOf('### Task 7:'),
+      plan.indexOf('### Task 8:'),
+    )
+
+    for (const requiredPolicy of [
+      'deny-by-default',
+      'レート制限',
+      '原子的',
+      'リダイレクト',
+      'サムネイル',
+      '依存パッケージ',
+    ]) {
+      expect(security).toContain(requiredPolicy)
+    }
+
+    for (const requiredEvidence of [
+      '脅威と悪用経路',
+      '入力境界',
+      '権限',
+      '秘密情報',
+      '保存データ・保持期間',
+      '外部通信先',
+      '防御テスト',
+    ]) {
+      expect(pullRequestTemplate).toContain(requiredEvidence)
+    }
+
+    expect(specification).toContain(
+      'https://github.com/rytich/play-cms/issues/8',
+    )
+    expect(plan).toContain('必要最小限')
+
+    for (const task4Requirement of [
+      'RateLimitRepository',
+      '16 KiB',
+      '429',
+      'Retry-After',
+      '並行要求',
+      '安全側に閉じ',
+    ]) {
+      expect(task4).toContain(task4Requirement)
+    }
+
+    for (const task3Requirement of [
+      '4096',
+      'PRIMARY KEY',
+      '上書き',
+      '最大行数',
+    ]) {
+      expect(task3).toContain(task3Requirement)
+    }
+
+    expect(task5).not.toContain('https://${apiHost}')
+    expect(task5).not.toContain('apiHost: string')
+    for (const task5Requirement of [
+      'https://filma.biz/filmaapi/token',
+      "redirect: 'error'",
+      '5秒',
+      '64 KiB',
+      '自動再試行しない',
+      'RateLimitRepository',
+      'Retry-After',
+      '並行要求',
+    ]) {
+      expect(task5).toContain(task5Requirement)
+    }
+    expect(task6).not.toContain('apiHost:')
+    expect(task7).toContain('`FILMA_API_HOST`は定義せず')
+    expect(task7).toContain('FILMA_LIVE_API_KEY')
+    for (const liveContractRequirement of [
+      'tests/unit/filma-live-contract.test.ts',
+      'https://filma.biz/filmaapi/token',
+      '5秒',
+      'chunked',
+      '64 KiB',
+      '自動再試行しない',
+    ]) {
+      expect(task7).toContain(liveContractRequirement)
+    }
   })
 
   it('discovers unit and integration TypeScript tests', async () => {
