@@ -246,7 +246,9 @@ git commit -m "feat: add administrator authentication core"
 - Create: `src/adapters/database/drizzle-admin-repository.ts`
 - Create: `src/adapters/database/drizzle-session-repository.ts`
 - Create: `src/adapters/database/drizzle-settings-repository.ts`
+- Create: `src/adapters/database/drizzle-rate-limit-repository.ts`
 - Create: `src/application/ports/settings-repository.ts`
+- Create: `src/application/ports/rate-limit-repository.ts`
 - Create: `migrations/0001_foundation.sql`
 - Create: `drizzle.config.ts`
 - Test: `tests/integration/database-repositories.test.ts`
@@ -254,25 +256,32 @@ git commit -m "feat: add administrator authentication core"
 **Interfaces:**
 
 - Consumes: Task 2の`AdminRepository`と`SessionRepository`。
-- Produces: `SettingsRepository`とD1・SQLiteで共有するDrizzleリポジトリ。
+- Produces: `SettingsRepository`、`RateLimitRepository`とD1・SQLiteで共有するDrizzleリポジトリ。
 
 - [ ] **Step 1: SQLite上のリポジトリ契約テストを書く**
 
 ```ts
 it('persists an encrypted Filma setting without exposing plaintext', async () => {
   await settings.saveFilmaConnection({
-    apiHost: 'filma.biz',
     encryptedApiKey: 'v1.iv.cipher',
     organizationId: 12,
     apiType: 'fullaccess',
     checkedAt: new Date('2026-09-03T00:00:00Z'),
   })
   expect(await settings.getFilmaConnection()).toMatchObject({
-    apiHost: 'filma.biz',
     encryptedApiKey: 'v1.iv.cipher',
     organizationId: 12,
   })
   expect(JSON.stringify(await dumpTables(db))).not.toContain('plain-api-key')
+})
+
+it('allows no more than the limit under concurrent requests', async () => {
+  const results = await Promise.all(
+    Array.from({ length: 20 }, () =>
+      rateLimits.consume({ key: 'hashed-client-and-route', limit: 10 }),
+    ),
+  )
+  expect(results.filter((result) => result.allowed)).toHaveLength(10)
 })
 ```
 
@@ -283,17 +292,17 @@ Expected: FAIL。`admins`テーブルが存在しない。
 
 - [ ] **Step 3: SQLとDrizzleリポジトリを実装する**
 
-`0001_foundation.sql`に`admins`、`sessions`、`app_settings`を作る。メールアドレスはunique、セッショントークンハッシュはprimary key、期限と更新日時はUnix秒で保存する。D1とSQLiteの両方で使えるSQLite方言のみを使用する。
+`0001_foundation.sql`に`admins`、`sessions`、`app_settings`、`request_rate_limits`を作る。メールアドレスはunique、セッショントークンハッシュはprimary key、期限と更新日時はUnix秒で保存する。レート制限はキー、固定窓の開始時刻、試行回数だけを保持し、加算を単一SQLで原子的に行う。D1とSQLiteの両方で使えるSQLite方言のみを使用する。
 
 - [ ] **Step 4: リポジトリ契約テストを通す**
 
 Run: `pnpm exec vitest run tests/integration/database-repositories.test.ts`
-Expected: PASS。作成・取得・更新・期限切れセッション削除が成功する。
+Expected: PASS。作成・取得・更新・期限切れセッション削除と、並行要求でも上限を超えて許可しないレート制限加算が成功する。
 
 - [ ] **Step 5: コミットする**
 
 ```bash
-git add src/adapters/database src/application/ports/settings-repository.ts migrations drizzle.config.ts tests/integration/database-repositories.test.ts
+git add src/adapters/database src/application/ports/settings-repository.ts src/application/ports/rate-limit-repository.ts migrations drizzle.config.ts tests/integration/database-repositories.test.ts
 git commit -m "feat: add portable sqlite repositories"
 ```
 
@@ -304,6 +313,7 @@ git commit -m "feat: add portable sqlite repositories"
 - Modify: `src/server/app.ts`
 - Create: `src/server/dependencies.ts`
 - Create: `src/server/middleware/admin-session.ts`
+- Create: `src/server/middleware/request-limits.ts`
 - Create: `src/server/middleware/security.ts`
 - Create: `src/server/routes/setup.ts`
 - Create: `src/server/routes/auth.ts`
@@ -312,8 +322,8 @@ git commit -m "feat: add portable sqlite repositories"
 
 **Interfaces:**
 
-- Consumes: Task 2の認証ユースケース、Task 3のリポジトリ。
-- Produces: `createApp(deps: AppDependencies): Hono`、`POST /api/setup/admin`、`POST /api/auth/login`、`POST /api/auth/logout`、`GET/PATCH /api/admin/profile`。
+- Consumes: Task 2の認証ユースケース、Task 3のリポジトリと`RateLimitRepository`、ランタイムが検証したクライアント識別子。
+- Produces: `createApp(deps: AppDependencies): Hono`、`POST /api/setup/admin`、`POST /api/auth/login`、`POST /api/auth/logout`、`GET/PATCH /api/admin/profile`、共通の入力上限・レート制限ミドルウェア。
 
 - [ ] **Step 1: Cookie認証フローの失敗テストを書く**
 
@@ -346,12 +356,12 @@ Expected: FAIL。ログイン応答が404になる。
 
 - [ ] **Step 3: APIとセキュリティ境界を実装する**
 
-JSON入力はZodで検証する。状態変更APIは`Origin`がリクエストURLと同一オリジンであることを確認する。Cookieは`HttpOnly; SameSite=Lax; Path=/`、本番では`Secure`を付ける。全応答に`X-Content-Type-Options: nosniff`、`Referrer-Policy: no-referrer`、`Content-Security-Policy`を付ける。
+JSON入力は16 KiBを上限として超過時は413を返し、Zodで検証する。初期登録とログインは、エンドポイントとランタイムが検証したクライアント識別子をキーに、10分の固定窓で10回まで許可する。DBにはIPアドレスを保存せず、アプリケーション秘密鍵からWeb Cryptoで導出したHMACキーでエンドポイントと識別子をハッシュ化して保存する。超過時は`Retry-After`付き429、レート制限DBの障害時は503として安全側に閉じる。Cloudflareは`CF-Connecting-IP`、Node.jsはsocket remote addressをランタイム側で検証して渡し、Node.jsでは明示したtrusted proxy以外の転送ヘッダーを信用しない。状態変更APIは`Origin`がリクエストURLと同一オリジンであることを確認する。Cookieは`HttpOnly; SameSite=Lax; Path=/`、本番では`Secure`を付ける。全応答に`X-Content-Type-Options: nosniff`、`Referrer-Policy: no-referrer`、`Content-Security-Policy`を付ける。
 
 - [ ] **Step 4: APIテストを通す**
 
 Run: `pnpm exec vitest run tests/integration/admin-api.test.ts`
-Expected: PASS。未認証は401、不正Originは403、初期登録の二回目は409になる。
+Expected: PASS。未認証は401、不正Originは403、初期登録の二回目は409、16 KiB超過は413、11回目は`Retry-After`付き429になる。固定窓の境界、並行要求、レート制限DB障害時に安全側に閉じることも確認する。
 
 - [ ] **Step 5: コミットする**
 
@@ -382,13 +392,9 @@ git commit -m "feat: expose secure administrator API"
 
 ```ts
 it('verifies and encrypts the API key before saving', async () => {
-  await configureFilma(deps, { apiHost: 'filma.biz', apiKey: 'secret-key' })
-  expect(filma.requests[0]).toEqual({
-    apiHost: 'filma.biz',
-    apiKey: 'secret-key',
-  })
+  await configureFilma(deps, { apiKey: 'secret-key' })
+  expect(filma.requests[0]).toEqual({ apiKey: 'secret-key' })
   expect(settings.saved).toMatchObject({
-    apiHost: 'filma.biz',
     encryptedApiKey: 'encrypted:secret-key',
     organizationId: 42,
     apiType: 'fullaccess',
@@ -411,19 +417,16 @@ export type FilmaConnection = {
 }
 
 export interface FilmaClient {
-  verifyApiKey(input: {
-    apiHost: string
-    apiKey: string
-  }): Promise<FilmaConnection>
+  verifyApiKey(input: { apiKey: string }): Promise<FilmaConnection>
 }
 ```
 
-クライアントは`https://${apiHost}/filmaapi/token`へPOSTし、`X-Api-Key`と`Content-Type: application/json`を送る。200のみ成功とし、401を`INVALID_API_KEY`、403を`DOMAIN_NOT_ALLOWED`、その他の4xx・5xxとネットワーク失敗を`FILMA_UNAVAILABLE`へ変換する。応答から`organization_id`と`api_type`だけを返し、JWTは保持しない。
+管理画面と設定APIはAPIキーだけを受け取り、送信先を変更させない。ランタイムはFilmaクライアントを信頼済みの固定URL`https://filma.biz/filmaapi/token`で構築する。クライアントは`X-Api-Key`と`Content-Type: application/json`を送信し、`redirect: 'error'`でリダイレクトを拒否する。タイムアウトは5秒、応答は64 KiBを上限とし、自動再試行しない。200のみ成功とし、401を`INVALID_API_KEY`、403を`DOMAIN_NOT_ALLOWED`、その他の4xx・5xx、タイムアウト、応答上限超過、ネットワーク失敗を`FILMA_UNAVAILABLE`へ変換する。応答から`organization_id`と`api_type`だけを返し、JWTは保持しない。
 
 - [ ] **Step 4: 単体・HTTP・APIテストを通す**
 
 Run: `pnpm exec vitest run tests/unit/configure-filma.test.ts tests/integration/http-filma-client.test.ts tests/integration/filma-settings-api.test.ts`
-Expected: PASS。APIキーがURL、レスポンス、保存データ、エラー文字列へ現れない。
+Expected: PASS。APIキーがURL、レスポンス、保存データ、エラー文字列へ現れない。設定APIが送信先を受け付けず、リダイレクト、5秒超過、64 KiB超過を拒否し、失敗時に自動再試行しないことも確認する。
 
 - [ ] **Step 5: コミットする**
 
@@ -460,7 +463,6 @@ it('shows connection metadata without rendering the saved API key', async () => 
     <FilmaSettingsPage
       api={fakeApi({
         configured: true,
-        apiHost: 'filma.biz',
         organizationId: 42,
         apiType: 'fullaccess',
         checkedAt: '2026-09-03T00:00:00.000Z',
@@ -541,7 +543,7 @@ Expected: FAIL。`parseRuntimeConfig`が存在しない。
 
 - [ ] **Step 3: CloudflareとDockerの起動構成を実装する**
 
-`wrangler.jsonc`にはD1 binding `DB`、R2 binding `MEDIA`、assets binding `ASSETS`を定義する。`.dev.vars.example`には`PLAY_SESSION_SECRET`、`PLAY_ENCRYPTION_KEY`、`FILMA_API_HOST=filma.biz`を記載する。`package.json.cloudflare.bindings`で二つのsecret生成方法を説明する。READMEのボタンは次を使う。
+`wrangler.jsonc`にはD1 binding `DB`、R2 binding `MEDIA`、assets binding `ASSETS`を定義する。`.dev.vars.example`には`PLAY_SESSION_SECRET`と`PLAY_ENCRYPTION_KEY`のダミー値だけを記載する。Filmaの本番送信先はTask 5で固定し、管理画面やランタイム環境変数から変更させない。`package.json.cloudflare.bindings`で二つのsecret生成方法を説明する。READMEのボタンは次を使う。
 
 ```md
 [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/rytich/play-cms)

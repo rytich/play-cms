@@ -43,6 +43,22 @@ describe('repository contract', () => {
       'docs/superpowers/plans/2026-09-03-foundation-implementation.md',
       'utf8',
     )
+    const task4 = plan.slice(
+      plan.indexOf('### Task 4:'),
+      plan.indexOf('### Task 5:'),
+    )
+    const task5 = plan.slice(
+      plan.indexOf('### Task 5:'),
+      plan.indexOf('### Task 6:'),
+    )
+    const task6 = plan.slice(
+      plan.indexOf('### Task 6:'),
+      plan.indexOf('### Task 7:'),
+    )
+    const task7 = plan.slice(
+      plan.indexOf('### Task 7:'),
+      plan.indexOf('### Task 8:'),
+    )
 
     for (const requiredPolicy of [
       'deny-by-default',
@@ -60,6 +76,8 @@ describe('repository contract', () => {
       '入力境界',
       '権限',
       '秘密情報',
+      '保存データ・保持期間',
+      '外部通信先',
       '防御テスト',
     ]) {
       expect(pullRequestTemplate).toContain(requiredEvidence)
@@ -69,6 +87,31 @@ describe('repository contract', () => {
       'https://github.com/rytich/play-cms/issues/8',
     )
     expect(plan).toContain('必要最小限')
+
+    for (const task4Requirement of [
+      'RateLimitRepository',
+      '16 KiB',
+      '429',
+      'Retry-After',
+      '並行要求',
+      '安全側に閉じ',
+    ]) {
+      expect(task4).toContain(task4Requirement)
+    }
+
+    expect(task5).not.toContain('https://${apiHost}')
+    expect(task5).not.toContain('apiHost: string')
+    for (const task5Requirement of [
+      'https://filma.biz/filmaapi/token',
+      "redirect: 'error'",
+      '5秒',
+      '64 KiB',
+      '自動再試行しない',
+    ]) {
+      expect(task5).toContain(task5Requirement)
+    }
+    expect(task6).not.toContain('apiHost:')
+    expect(task7).not.toContain('FILMA_API_HOST')
   })
 
   it('discovers unit and integration TypeScript tests', async () => {
