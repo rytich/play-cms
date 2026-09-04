@@ -50,6 +50,7 @@ describe('Filma live token contract', () => {
         input: 'https://staging.filma.example/filmaapi/token',
         init: {
           method: 'POST',
+          redirect: 'error',
           headers: {
             'Content-Type': 'application/json',
             'X-Api-Key': 'dedicated-test-key',

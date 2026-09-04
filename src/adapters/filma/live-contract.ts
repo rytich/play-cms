@@ -59,6 +59,7 @@ export async function verifyFilmaTokenContract(
   try {
     response = await request(`https://${config.apiHost}/filmaapi/token`, {
       method: 'POST',
+      redirect: 'error',
       headers: {
         'Content-Type': 'application/json',
         'X-Api-Key': config.apiKey,
