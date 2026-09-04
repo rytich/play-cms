@@ -135,6 +135,7 @@ DockerfileはNode.jsランタイムで同じHonoアプリを起動する。compo
 - ドメインとユースケースは外部サービスなしで単体テストする。
 - D1互換SQLiteとローカルSQLiteのマイグレーションを統合テストする。
 - Filma APIは契約境界をテストし、秘密値がログへ出ないことを確認する。
+- 専用テスト組織への実API契約テストは明示コマンドでのみ実行し、通常の`pnpm verify`と公開CIから分離する。設定値はGit管理外の`.dev.vars`から読み込み、結果にはHTTPステータスと確認した項目名だけを残す。[GitHub Issue #6](https://github.com/rytich/play-cms/issues/6)
 - 初期登録、ログイン、APIキー設定、接続確認をE2Eテストする。
 - Cloudflare用とNode.js用の両方をCIでビルドする。
 - Cloudflare成果物の圧縮後サイズをCIで計測する。

@@ -357,6 +357,8 @@ git commit -m "feat: expose secure administrator API"
 
 ### Task 5: Filma接続設定
 
+事前準備として[GitHub Issue #6](https://github.com/rytich/play-cms/issues/6)の明示実行Liveテストで`POST /filmaapi/token`の認証契約を確認する。APIキー、JWT、組織ID、認証ヘッダー、レスポンス本文は記録せず、通常の`pnpm verify`と公開CIから分離する。
+
 **Files:**
 
 - Create: `src/application/ports/filma-client.ts`

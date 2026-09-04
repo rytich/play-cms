@@ -1,0 +1,4 @@
+# Copy this file to .dev.vars and replace the values locally.
+# Never commit .dev.vars or paste its values into Issue, PR, chat, or logs.
+FILMA_API_HOST=filma.biz
+FILMA_LIVE_API_KEY=replace-with-a-dedicated-test-key
