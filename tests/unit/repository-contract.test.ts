@@ -131,7 +131,9 @@ describe('repository contract', () => {
     expect(task7).toContain('FILMA_LIVE_API_KEY')
     for (const liveContractRequirement of [
       'tests/unit/filma-live-contract.test.ts',
+      'https://filma.biz/filmaapi/token',
       '5秒',
+      'chunked',
       '64 KiB',
       '自動再試行しない',
     ]) {
