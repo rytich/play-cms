@@ -379,13 +379,9 @@ git commit -m "feat: expose secure administrator API"
 
 ```ts
 it('verifies and encrypts the API key before saving', async () => {
-  await configureFilma(deps, { apiHost: 'filma.biz', apiKey: 'secret-key' })
-  expect(filma.requests[0]).toEqual({
-    apiHost: 'filma.biz',
-    apiKey: 'secret-key',
-  })
+  await configureFilma(deps, { apiKey: 'secret-key' })
+  expect(filma.requests[0]).toEqual({ apiKey: 'secret-key' })
   expect(settings.saved).toMatchObject({
-    apiHost: 'filma.biz',
     encryptedApiKey: 'encrypted:secret-key',
     organizationId: 42,
     apiType: 'fullaccess',
@@ -408,19 +404,16 @@ export type FilmaConnection = {
 }
 
 export interface FilmaClient {
-  verifyApiKey(input: {
-    apiHost: string
-    apiKey: string
-  }): Promise<FilmaConnection>
+  verifyApiKey(input: { apiKey: string }): Promise<FilmaConnection>
 }
 ```
 
-クライアントは`https://${apiHost}/filmaapi/token`へPOSTし、`X-Api-Key`と`Content-Type: application/json`を送る。200のみ成功とし、401を`INVALID_API_KEY`、403を`DOMAIN_NOT_ALLOWED`、その他の4xx・5xxとネットワーク失敗を`FILMA_UNAVAILABLE`へ変換する。応答から`organization_id`と`api_type`だけを返し、JWTは保持しない。
+管理画面と設定APIはAPIキーだけを受け取り、送信先を変更させない。ランタイムはFilmaクライアントを信頼済みの固定URL`https://filma.biz/filmaapi/token`で構築する。クライアントは`X-Api-Key`と`Content-Type: application/json`を送信し、`redirect: 'error'`でリダイレクトを拒否する。タイムアウトは5秒、応答は64 KiBを上限とし、自動再試行しない。200のみ成功とし、401を`INVALID_API_KEY`、403を`DOMAIN_NOT_ALLOWED`、その他の4xx・5xx、タイムアウト、応答上限超過、ネットワーク失敗を`FILMA_UNAVAILABLE`へ変換する。応答から`organization_id`と`api_type`だけを返し、JWTは保持しない。
 
 - [ ] **Step 4: 単体・HTTP・APIテストを通す**
 
 Run: `pnpm exec vitest run tests/unit/configure-filma.test.ts tests/integration/http-filma-client.test.ts tests/integration/filma-settings-api.test.ts`
-Expected: PASS。APIキーがURL、レスポンス、保存データ、エラー文字列へ現れない。
+Expected: PASS。APIキーがURL、レスポンス、保存データ、エラー文字列へ現れない。設定APIが送信先を受け付けず、リダイレクト、5秒超過、64 KiB超過を拒否し、失敗時に自動再試行しないことも確認する。
 
 - [ ] **Step 5: コミットする**
 
@@ -538,7 +531,7 @@ Expected: FAIL。`parseRuntimeConfig`が存在しない。
 
 - [ ] **Step 3: CloudflareとDockerの起動構成を実装する**
 
-`wrangler.jsonc`にはD1 binding `DB`、R2 binding `MEDIA`、assets binding `ASSETS`を定義する。`.dev.vars.example`には`PLAY_SESSION_SECRET`、`PLAY_ENCRYPTION_KEY`、`FILMA_API_HOST=filma.biz`を記載する。`package.json.cloudflare.bindings`で二つのsecret生成方法を説明する。READMEのボタンは次を使う。
+`wrangler.jsonc`にはD1 binding `DB`、R2 binding `MEDIA`、assets binding `ASSETS`を定義する。`.dev.vars.example`のruntime欄には`PLAY_SESSION_SECRET`と`PLAY_ENCRYPTION_KEY`のダミー値を記載し、live test専用欄には`FILMA_LIVE_API_KEY=replace-with-dedicated-test-key`を残す。本番ランタイムは`FILMA_LIVE_API_KEY`を読まず、live testを含むFilma送信先は`https://filma.biz/filmaapi/token`へ固定する。`FILMA_API_HOST`は定義せず、管理画面や環境変数から送信先を変更させない。`package.json.cloudflare.bindings`で二つのruntime secret生成方法を説明する。READMEのボタンは次を使う。
 
 ```md
 [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/rytich/play-cms)

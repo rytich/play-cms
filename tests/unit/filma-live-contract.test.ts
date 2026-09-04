@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import {
   FilmaContractError,
@@ -7,6 +7,10 @@ import {
 } from '../../src/adapters/filma/live-contract.js'
 
 describe('Filma live token contract', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
   it('rejects a missing live API key', () => {
     expect(() => readFilmaLiveConfig({})).toThrowError(
       new FilmaContractError('MISSING_CONFIGURATION', 'FILMA_LIVE_API_KEY'),
@@ -38,20 +42,18 @@ describe('Filma live token contract', () => {
       },
     )
 
-    expect(requests).toEqual([
-      {
-        input: 'https://filma.biz/filmaapi/token',
-        init: {
-          method: 'POST',
-          redirect: 'error',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-Api-Key': 'dedicated-test-key',
-          },
-          body: '{}',
-        },
+    expect(requests).toHaveLength(1)
+    expect(requests[0]?.input).toBe('https://filma.biz/filmaapi/token')
+    expect(requests[0]?.init).toMatchObject({
+      method: 'POST',
+      redirect: 'error',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Api-Key': 'dedicated-test-key',
       },
-    ])
+      body: '{}',
+    })
+    expect(requests[0]?.init.signal).toBeInstanceOf(AbortSignal)
   })
 
   it('returns only a redacted summary for a valid token response', async () => {
@@ -115,12 +117,14 @@ describe('Filma live token contract', () => {
     },
   )
 
-  it('maps network failures without exposing the API key', async () => {
+  it('maps network failures without retrying or exposing the API key', async () => {
     const apiKey = 'network-secret-that-must-not-leak'
+    let attempts = 0
 
-    const operation = verifyFilmaTokenContract({ apiKey }, () =>
-      Promise.reject(new Error(`failed with ${apiKey}`)),
-    )
+    const operation = verifyFilmaTokenContract({ apiKey }, () => {
+      attempts += 1
+      return Promise.reject(new Error(`failed with ${apiKey}`))
+    })
 
     await expect(operation).rejects.toEqual(
       new FilmaContractError('FILMA_UNAVAILABLE'),
@@ -128,12 +132,19 @@ describe('Filma live token contract', () => {
     await operation.catch((error: unknown) => {
       expect(String(error)).not.toContain(apiKey)
     })
+    expect(attempts).toBe(1)
   })
 
   it('maps unreadable successful responses without exposing their body', async () => {
     const responseBody = 'response-secret-that-must-not-leak'
-    const response = new Response('{}', { status: 200 })
-    response.json = () => Promise.reject(new Error(responseBody))
+    const response = new Response(
+      new ReadableStream({
+        start(controller) {
+          controller.error(new Error(responseBody))
+        },
+      }),
+      { status: 200 },
+    )
 
     const operation = verifyFilmaTokenContract({ apiKey: 'test-key' }, () =>
       Promise.resolve(response),
@@ -145,6 +156,59 @@ describe('Filma live token contract', () => {
     await operation.catch((error: unknown) => {
       expect(String(error)).not.toContain(responseBody)
     })
+  })
+
+  it('aborts an unavailable request after five seconds without retrying', async () => {
+    vi.useFakeTimers()
+    let attempts = 0
+
+    const operation = verifyFilmaTokenContract(
+      { apiKey: 'test-key' },
+      (_input, init) => {
+        attempts += 1
+        return new Promise((_resolve, reject) => {
+          init.signal?.addEventListener('abort', () => {
+            reject(new DOMException('request aborted', 'AbortError'))
+          })
+        })
+      },
+    )
+    const rejection = expect(operation).rejects.toEqual(
+      new FilmaContractError('FILMA_UNAVAILABLE'),
+    )
+
+    await vi.advanceTimersByTimeAsync(4_999)
+    expect(attempts).toBe(1)
+    await vi.advanceTimersByTimeAsync(1)
+    await rejection
+    expect(attempts).toBe(1)
+  })
+
+  it('rejects a chunked response larger than 64 KiB without retrying', async () => {
+    let attempts = 0
+    const firstChunk = new Uint8Array(32 * 1024)
+    const secondChunk = new Uint8Array(32 * 1024 + 1)
+
+    const operation = verifyFilmaTokenContract({ apiKey: 'test-key' }, () => {
+      attempts += 1
+      return Promise.resolve(
+        new Response(
+          new ReadableStream({
+            start(controller) {
+              controller.enqueue(firstChunk)
+              controller.enqueue(secondChunk)
+              controller.close()
+            },
+          }),
+          { status: 200 },
+        ),
+      )
+    })
+
+    await expect(operation).rejects.toEqual(
+      new FilmaContractError('FILMA_UNAVAILABLE'),
+    )
+    expect(attempts).toBe(1)
   })
 
   it('maps a null successful response to a sanitized schema error', async () => {
