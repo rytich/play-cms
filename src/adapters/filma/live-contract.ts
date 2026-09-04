@@ -1,5 +1,4 @@
 export type FilmaLiveConfig = {
-  apiHost: string
   apiKey: string
 }
 
@@ -17,7 +16,6 @@ export type FilmaContractErrorCode =
   | 'FILMA_UNAVAILABLE'
   | 'INVALID_RESPONSE_SCHEMA'
   | 'MISSING_CONFIGURATION'
-  | 'INVALID_API_HOST'
 
 export class FilmaContractError extends Error {
   constructor(
@@ -29,26 +27,18 @@ export class FilmaContractError extends Error {
   }
 }
 
-const hostnamePattern =
-  /^(?=.{1,253}$)(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?$/
+const filmaTokenEndpoint = 'https://filma.biz/filmaapi/token'
 
 export function readFilmaLiveConfig(
   env: Record<string, string | undefined>,
 ): FilmaLiveConfig {
-  const apiHost = env.FILMA_API_HOST?.trim()
   const apiKey = env.FILMA_LIVE_API_KEY
 
-  if (apiHost === undefined || apiHost.length === 0) {
-    throw new FilmaContractError('MISSING_CONFIGURATION', 'FILMA_API_HOST')
-  }
   if (apiKey === undefined || apiKey.trim().length === 0) {
     throw new FilmaContractError('MISSING_CONFIGURATION', 'FILMA_LIVE_API_KEY')
   }
-  if (!hostnamePattern.test(apiHost)) {
-    throw new FilmaContractError('INVALID_API_HOST')
-  }
 
-  return { apiHost, apiKey }
+  return { apiKey }
 }
 
 export async function verifyFilmaTokenContract(
@@ -57,7 +47,7 @@ export async function verifyFilmaTokenContract(
 ): Promise<FilmaContractSummary> {
   let response: Response
   try {
-    response = await request(`https://${config.apiHost}/filmaapi/token`, {
+    response = await request(filmaTokenEndpoint, {
       method: 'POST',
       redirect: 'error',
       headers: {

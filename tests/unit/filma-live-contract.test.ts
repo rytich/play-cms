@@ -7,33 +7,26 @@ import {
 } from '../../src/adapters/filma/live-contract.js'
 
 describe('Filma live token contract', () => {
-  it.each([
-    [{ FILMA_API_HOST: 'filma.example' }, 'FILMA_LIVE_API_KEY'],
-    [{ FILMA_LIVE_API_KEY: 'test-key' }, 'FILMA_API_HOST'],
-  ])('rejects missing live configuration without values', (env, variable) => {
-    expect(() => readFilmaLiveConfig(env)).toThrowError(
-      new FilmaContractError('MISSING_CONFIGURATION', variable),
+  it('rejects a missing live API key', () => {
+    expect(() => readFilmaLiveConfig({})).toThrowError(
+      new FilmaContractError('MISSING_CONFIGURATION', 'FILMA_LIVE_API_KEY'),
     )
   })
 
-  it.each([
-    'https://filma.example',
-    'filma.example/path',
-    'user@filma.example',
-  ])('rejects unsafe API host %s before sending credentials', (apiHost) => {
-    expect(() =>
+  it('does not accept a live API host from the environment', () => {
+    expect(
       readFilmaLiveConfig({
-        FILMA_API_HOST: apiHost,
+        FILMA_API_HOST: 'attacker.example',
         FILMA_LIVE_API_KEY: 'test-key',
       }),
-    ).toThrowError(new FilmaContractError('INVALID_API_HOST'))
+    ).toEqual({ apiKey: 'test-key' })
   })
 
-  it('posts the API key to the configured HTTPS token endpoint', async () => {
+  it('posts the API key only to the fixed Filma HTTPS token endpoint', async () => {
     const requests: Array<{ input: string; init: RequestInit }> = []
 
     await verifyFilmaTokenContract(
-      { apiHost: 'staging.filma.example', apiKey: 'dedicated-test-key' },
+      { apiKey: 'dedicated-test-key' },
       (input, init) => {
         requests.push({ input, init })
         return Promise.resolve(
@@ -47,7 +40,7 @@ describe('Filma live token contract', () => {
 
     expect(requests).toEqual([
       {
-        input: 'https://staging.filma.example/filmaapi/token',
+        input: 'https://filma.biz/filmaapi/token',
         init: {
           method: 'POST',
           redirect: 'error',
@@ -66,22 +59,20 @@ describe('Filma live token contract', () => {
     const jwt = 'test-jwt-that-must-not-leak'
     const organizationId = 42
 
-    const result = await verifyFilmaTokenContract(
-      { apiHost: 'filma.example', apiKey },
-      () =>
-        Promise.resolve(
-          new Response(
-            JSON.stringify({
-              organization_id: organizationId,
-              api_type: 'readonly',
-              token: jwt,
-            }),
-            {
-              status: 200,
-              headers: { 'content-type': 'application/json' },
-            },
-          ),
+    const result = await verifyFilmaTokenContract({ apiKey }, () =>
+      Promise.resolve(
+        new Response(
+          JSON.stringify({
+            organization_id: organizationId,
+            api_type: 'readonly',
+            token: jwt,
+          }),
+          {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          },
         ),
+      ),
     )
 
     expect(result).toEqual({
@@ -115,9 +106,8 @@ describe('Filma live token contract', () => {
         return Promise.resolve({ token: secretBody })
       }
 
-      const operation = verifyFilmaTokenContract(
-        { apiHost: 'filma.example', apiKey: 'test-key' },
-        () => Promise.resolve(response),
+      const operation = verifyFilmaTokenContract({ apiKey: 'test-key' }, () =>
+        Promise.resolve(response),
       )
 
       await expect(operation).rejects.toEqual(new FilmaContractError(code))
@@ -128,9 +118,8 @@ describe('Filma live token contract', () => {
   it('maps network failures without exposing the API key', async () => {
     const apiKey = 'network-secret-that-must-not-leak'
 
-    const operation = verifyFilmaTokenContract(
-      { apiHost: 'filma.example', apiKey },
-      () => Promise.reject(new Error(`failed with ${apiKey}`)),
+    const operation = verifyFilmaTokenContract({ apiKey }, () =>
+      Promise.reject(new Error(`failed with ${apiKey}`)),
     )
 
     await expect(operation).rejects.toEqual(
@@ -146,9 +135,8 @@ describe('Filma live token contract', () => {
     const response = new Response('{}', { status: 200 })
     response.json = () => Promise.reject(new Error(responseBody))
 
-    const operation = verifyFilmaTokenContract(
-      { apiHost: 'filma.example', apiKey: 'test-key' },
-      () => Promise.resolve(response),
+    const operation = verifyFilmaTokenContract({ apiKey: 'test-key' }, () =>
+      Promise.resolve(response),
     )
 
     await expect(operation).rejects.toEqual(
@@ -163,9 +151,8 @@ describe('Filma live token contract', () => {
     const response = new Response('null', { status: 200 })
 
     await expect(
-      verifyFilmaTokenContract(
-        { apiHost: 'filma.example', apiKey: 'test-key' },
-        () => Promise.resolve(response),
+      verifyFilmaTokenContract({ apiKey: 'test-key' }, () =>
+        Promise.resolve(response),
       ),
     ).rejects.toEqual(new FilmaContractError('INVALID_RESPONSE_SCHEMA'))
   })
