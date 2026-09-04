@@ -47,6 +47,10 @@ describe('repository contract', () => {
       plan.indexOf('### Task 4:'),
       plan.indexOf('### Task 5:'),
     )
+    const task3 = plan.slice(
+      plan.indexOf('### Task 3:'),
+      plan.indexOf('### Task 4:'),
+    )
     const task5 = plan.slice(
       plan.indexOf('### Task 5:'),
       plan.indexOf('### Task 6:'),
@@ -99,6 +103,15 @@ describe('repository contract', () => {
       expect(task4).toContain(task4Requirement)
     }
 
+    for (const task3Requirement of [
+      '4096',
+      'PRIMARY KEY',
+      '上書き',
+      '最大行数',
+    ]) {
+      expect(task3).toContain(task3Requirement)
+    }
+
     expect(task5).not.toContain('https://${apiHost}')
     expect(task5).not.toContain('apiHost: string')
     for (const task5Requirement of [
@@ -107,11 +120,15 @@ describe('repository contract', () => {
       '5秒',
       '64 KiB',
       '自動再試行しない',
+      'RateLimitRepository',
+      'Retry-After',
+      '並行要求',
     ]) {
       expect(task5).toContain(task5Requirement)
     }
     expect(task6).not.toContain('apiHost:')
-    expect(task7).not.toContain('FILMA_API_HOST')
+    expect(task7).toContain('`FILMA_API_HOST`は定義せず')
+    expect(task7).toContain('FILMA_LIVE_API_KEY')
   })
 
   it('discovers unit and integration TypeScript tests', async () => {

@@ -278,7 +278,11 @@ it('persists an encrypted Filma setting without exposing plaintext', async () =>
 it('allows no more than the limit under concurrent requests', async () => {
   const results = await Promise.all(
     Array.from({ length: 20 }, () =>
-      rateLimits.consume({ key: 'hashed-client-and-route', limit: 10 }),
+      rateLimits.consume({
+        endpoint: 'admin-login',
+        bucket: 1234,
+        limit: 10,
+      }),
     ),
   )
   expect(results.filter((result) => result.allowed)).toHaveLength(10)
@@ -292,12 +296,12 @@ Expected: FAIL。`admins`テーブルが存在しない。
 
 - [ ] **Step 3: SQLとDrizzleリポジトリを実装する**
 
-`0001_foundation.sql`に`admins`、`sessions`、`app_settings`、`request_rate_limits`を作る。メールアドレスはunique、セッショントークンハッシュはprimary key、期限と更新日時はUnix秒で保存する。レート制限はキー、固定窓の開始時刻、試行回数だけを保持し、加算を単一SQLで原子的に行う。D1とSQLiteの両方で使えるSQLite方言のみを使用する。
+`0001_foundation.sql`に`admins`、`sessions`、`app_settings`、`request_rate_limits`を作る。メールアドレスはunique、セッショントークンハッシュはprimary key、期限と更新日時はUnix秒で保存する。レート制限はコードで固定したendpoint名、0から4095までのHMAC bucket、固定窓の開始時刻、試行回数を保持し、`PRIMARY KEY(endpoint, bucket)`とする。窓が変わったときは同じ行を上書きし、履歴行を作らない。最大行数は固定endpoint数×4096であり、加算と窓の上書きを単一SQLで原子的に行う。D1とSQLiteの両方で使えるSQLite方言のみを使用する。
 
 - [ ] **Step 4: リポジトリ契約テストを通す**
 
 Run: `pnpm exec vitest run tests/integration/database-repositories.test.ts`
-Expected: PASS。作成・取得・更新・期限切れセッション削除と、並行要求でも上限を超えて許可しないレート制限加算が成功する。
+Expected: PASS。作成・取得・更新・期限切れセッション削除と、並行要求でも上限を超えて許可しないレート制限加算が成功する。複数の固定窓と多数の識別子を処理しても同じbucket行が上書きされ、最大行数を超えないことも確認する。
 
 - [ ] **Step 5: コミットする**
 
@@ -356,7 +360,7 @@ Expected: FAIL。ログイン応答が404になる。
 
 - [ ] **Step 3: APIとセキュリティ境界を実装する**
 
-JSON入力は16 KiBを上限として超過時は413を返し、Zodで検証する。初期登録とログインは、エンドポイントとランタイムが検証したクライアント識別子をキーに、10分の固定窓で10回まで許可する。DBにはIPアドレスを保存せず、アプリケーション秘密鍵からWeb Cryptoで導出したHMACキーでエンドポイントと識別子をハッシュ化して保存する。超過時は`Retry-After`付き429、レート制限DBの障害時は503として安全側に閉じる。Cloudflareは`CF-Connecting-IP`、Node.jsはsocket remote addressをランタイム側で検証して渡し、Node.jsでは明示したtrusted proxy以外の転送ヘッダーを信用しない。状態変更APIは`Origin`がリクエストURLと同一オリジンであることを確認する。Cookieは`HttpOnly; SameSite=Lax; Path=/`、本番では`Secure`を付ける。全応答に`X-Content-Type-Options: nosniff`、`Referrer-Policy: no-referrer`、`Content-Security-Policy`を付ける。
+JSON入力は16 KiBを上限として超過時は413を返し、Zodで検証する。初期登録とログインは、エンドポイントとランタイムが検証したクライアント識別子をキーに、10分の固定窓で10回まで許可する。DBにはIPアドレスを保存せず、アプリケーション秘密鍵からWeb Cryptoで導出したHMAC値の先頭12 bitを0から4095までのbucketとして保存する。超過時は`Retry-After`付き429、レート制限DBの障害時は503として安全側に閉じる。Cloudflareは`CF-Connecting-IP`、Node.jsはsocket remote addressをランタイム側で検証して渡し、Node.jsでは明示したtrusted proxy以外の転送ヘッダーを信用しない。状態変更APIは`Origin`がリクエストURLと同一オリジンであることを確認する。Cookieは`HttpOnly; SameSite=Lax; Path=/`、本番では`Secure`を付ける。全応答に`X-Content-Type-Options: nosniff`、`Referrer-Policy: no-referrer`、`Content-Security-Policy`を付ける。
 
 - [ ] **Step 4: APIテストを通す**
 
@@ -385,7 +389,7 @@ git commit -m "feat: expose secure administrator API"
 
 **Interfaces:**
 
-- Consumes: `SecretBox`、`SettingsRepository`、Filma API `POST /filmaapi/token`。
+- Consumes: `SecretBox`、`SettingsRepository`、`RateLimitRepository`、Filma API `POST /filmaapi/token`。
 - Produces: `FilmaClient.verifyApiKey()`、`configureFilma()`、`GET/PUT /api/admin/filma-settings`。
 
 - [ ] **Step 1: APIキーが保存前に検証・暗号化される失敗テストを書く**
@@ -421,12 +425,12 @@ export interface FilmaClient {
 }
 ```
 
-管理画面と設定APIはAPIキーだけを受け取り、送信先を変更させない。ランタイムはFilmaクライアントを信頼済みの固定URL`https://filma.biz/filmaapi/token`で構築する。クライアントは`X-Api-Key`と`Content-Type: application/json`を送信し、`redirect: 'error'`でリダイレクトを拒否する。タイムアウトは5秒、応答は64 KiBを上限とし、自動再試行しない。200のみ成功とし、401を`INVALID_API_KEY`、403を`DOMAIN_NOT_ALLOWED`、その他の4xx・5xx、タイムアウト、応答上限超過、ネットワーク失敗を`FILMA_UNAVAILABLE`へ変換する。応答から`organization_id`と`api_type`だけを返し、JWTは保持しない。
+管理画面と設定APIはAPIキーだけを受け取り、送信先を変更させない。`PUT /api/admin/filma-settings`はTask 4と同じ`RateLimitRepository`を使い、エンドポイントと検証済みクライアント識別子のbucketごとに10分で5回まで許可する。超過時は`Retry-After`付き429、DB障害時は503として安全側に閉じ、並行要求でも上限を超えてFilmaへ送信しない。ランタイムはFilmaクライアントを信頼済みの固定URL`https://filma.biz/filmaapi/token`で構築する。クライアントは`X-Api-Key`と`Content-Type: application/json`を送信し、`redirect: 'error'`でリダイレクトを拒否する。タイムアウトは5秒、応答は64 KiBを上限とし、自動再試行しない。200のみ成功とし、401を`INVALID_API_KEY`、403を`DOMAIN_NOT_ALLOWED`、その他の4xx・5xx、タイムアウト、応答上限超過、ネットワーク失敗を`FILMA_UNAVAILABLE`へ変換する。応答から`organization_id`と`api_type`だけを返し、JWTは保持しない。
 
 - [ ] **Step 4: 単体・HTTP・APIテストを通す**
 
 Run: `pnpm exec vitest run tests/unit/configure-filma.test.ts tests/integration/http-filma-client.test.ts tests/integration/filma-settings-api.test.ts`
-Expected: PASS。APIキーがURL、レスポンス、保存データ、エラー文字列へ現れない。設定APIが送信先を受け付けず、リダイレクト、5秒超過、64 KiB超過を拒否し、失敗時に自動再試行しないことも確認する。
+Expected: PASS。APIキーがURL、レスポンス、保存データ、エラー文字列へ現れない。設定APIが送信先を受け付けず、リダイレクト、5秒超過、64 KiB超過を拒否し、失敗時に自動再試行しないことも確認する。6回目は`Retry-After`付き429、レート制限DB障害は503となり、並行要求でも5回を超えてFilmaへ送信しない。
 
 - [ ] **Step 5: コミットする**
 
@@ -543,7 +547,7 @@ Expected: FAIL。`parseRuntimeConfig`が存在しない。
 
 - [ ] **Step 3: CloudflareとDockerの起動構成を実装する**
 
-`wrangler.jsonc`にはD1 binding `DB`、R2 binding `MEDIA`、assets binding `ASSETS`を定義する。`.dev.vars.example`には`PLAY_SESSION_SECRET`と`PLAY_ENCRYPTION_KEY`のダミー値だけを記載する。Filmaの本番送信先はTask 5で固定し、管理画面やランタイム環境変数から変更させない。`package.json.cloudflare.bindings`で二つのsecret生成方法を説明する。READMEのボタンは次を使う。
+`wrangler.jsonc`にはD1 binding `DB`、R2 binding `MEDIA`、assets binding `ASSETS`を定義する。`.dev.vars.example`のruntime欄には`PLAY_SESSION_SECRET`と`PLAY_ENCRYPTION_KEY`のダミー値を記載し、live test専用欄には`FILMA_LIVE_API_KEY=replace-with-dedicated-test-key`を残す。本番ランタイムは`FILMA_LIVE_API_KEY`を読まず、live testを含むFilma送信先は`https://filma.biz/filmaapi/token`へ固定する。`FILMA_API_HOST`は定義せず、管理画面や環境変数から送信先を変更させない。`package.json.cloudflare.bindings`で二つのruntime secret生成方法を説明する。READMEのボタンは次を使う。
 
 ```md
 [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/rytich/play-cms)

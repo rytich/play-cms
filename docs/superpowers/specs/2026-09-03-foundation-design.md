@@ -153,7 +153,7 @@ DockerfileはNode.jsランタイムで同じHonoアプリを起動する。compo
 - `README.md`: 利用者向け概要、導入、Deployボタン
 - `AGENTS.md`: AIエージェント向け入口と必読文書、検証コマンド
 - `CONTRIBUTING.md`: 人間・AI共通の開発手順とPR規約
-- `SECURITY.md`: 非公開の脆弱性報告方法
+- `SECURITY.md`: 非公開の脆弱性報告方法と実装セキュリティ方針
 - `docs/architecture/`: 現在の構成とデータフロー
 - `docs/decisions/`: 採用・不採用を含む技術判断
 - `docs/development/`: ローカル開発、テスト、DB変更手順
