@@ -15,6 +15,10 @@
 - TypeScriptはstrict modeで使用する。
 - Node.jsは22.13.0系または24以上を対象にする。
 - 単一リポジトリ・単一パッケージから開始する。
+- 機能、公開API、依存パッケージ、権限、保存データ、外部通信を必要最小限にする。
+- 公開コードで成立する`deny-by-default`を採用し、独自暗号を実装しない。
+- 認証・視聴コード入力・費用や負荷を生むAPIはレート制限し、使い切り状態は原子的に更新する。
+- 外部通信先を許可済みホストへ固定してリダイレクトを拒否し、期限切れ動画のサムネイルを含む情報を返さない。
 - Filma APIキーは平文でDB、ログ、URLへ保存・出力しない。
 - Filma認証は`POST /filmaapi/token`へ`X-Api-Key`ヘッダーで送信する。
 - CloudflareとNode.jsで同じCore、Application、Server、UIを使用する。
@@ -22,6 +26,7 @@
 - Issueは作業状態、リポジトリ内文書は確定した設計と運用の正本とする。
 - 各Taskは一つのGitHub Issueと一つの`develop`向けPRで実施する。
 - Issue、PR、関連するリポジトリ内文書を相互にリンクする。
+- セキュリティ方針は[GitHub Issue #8](https://github.com/rytich/play-cms/issues/8)と`SECURITY.md`を参照し、各Taskで脅威、入力境界、権限、秘密情報、失敗時の挙動、防御テストを記録する。
 
 ---
 

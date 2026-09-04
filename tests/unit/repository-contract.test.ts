@@ -23,9 +23,52 @@ describe('repository contract', () => {
     const agents = await readFile('AGENTS.md', 'utf8')
 
     expect(agents).toContain('CONTRIBUTING.md')
+    expect(agents).toContain('SECURITY.md')
     expect(agents).toContain('docs/development/workflow.md')
     expect(agents).toContain('pnpm verify')
     expect(agents).toContain('.agents/skills/play-cms-reviewer/SKILL.md')
+  })
+
+  it('requires security simplicity evidence in every pull request', async () => {
+    const security = await readFile('SECURITY.md', 'utf8')
+    const pullRequestTemplate = await readFile(
+      '.github/pull_request_template.md',
+      'utf8',
+    )
+    const specification = await readFile(
+      'docs/superpowers/specs/2026-09-03-foundation-design.md',
+      'utf8',
+    )
+    const plan = await readFile(
+      'docs/superpowers/plans/2026-09-03-foundation-implementation.md',
+      'utf8',
+    )
+
+    for (const requiredPolicy of [
+      'deny-by-default',
+      'レート制限',
+      '原子的',
+      'リダイレクト',
+      'サムネイル',
+      '依存パッケージ',
+    ]) {
+      expect(security).toContain(requiredPolicy)
+    }
+
+    for (const requiredEvidence of [
+      '脅威と悪用経路',
+      '入力境界',
+      '権限',
+      '秘密情報',
+      '防御テスト',
+    ]) {
+      expect(pullRequestTemplate).toContain(requiredEvidence)
+    }
+
+    expect(specification).toContain(
+      'https://github.com/rytich/play-cms/issues/8',
+    )
+    expect(plan).toContain('必要最小限')
   })
 
   it('discovers unit and integration TypeScript tests', async () => {
