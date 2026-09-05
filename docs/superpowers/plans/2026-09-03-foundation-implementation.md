@@ -15,6 +15,10 @@
 - TypeScriptはstrict modeで使用する。
 - Node.jsは22.13.0系または24以上を対象にする。
 - 単一リポジトリ・単一パッケージから開始する。
+- 機能、公開API、依存パッケージ、権限、保存データ、外部通信を必要最小限にする。
+- 公開コードで成立する`deny-by-default`を採用し、独自暗号を実装しない。
+- 認証・視聴コード入力・費用や負荷を生むAPIはレート制限し、使い切り状態は原子的に更新する。
+- 外部通信先を許可済みホストへ固定してリダイレクトを拒否し、期限切れ動画のサムネイルを含む情報を返さない。
 - Filma APIキーは平文でDB、ログ、URLへ保存・出力しない。
 - Filma認証は`POST /filmaapi/token`へ`X-Api-Key`ヘッダーで送信する。
 - CloudflareとNode.jsで同じCore、Application、Server、UIを使用する。
@@ -22,6 +26,7 @@
 - Issueは作業状態、リポジトリ内文書は確定した設計と運用の正本とする。
 - 各Taskは一つのGitHub Issueと一つの`develop`向けPRで実施する。
 - Issue、PR、関連するリポジトリ内文書を相互にリンクする。
+- セキュリティ方針は[GitHub Issue #8](https://github.com/rytich/play-cms/issues/8)と`SECURITY.md`を参照し、各Taskで脅威、入力境界、権限、秘密情報、失敗時の挙動、防御テストを記録する。
 
 ---
 
@@ -241,7 +246,9 @@ git commit -m "feat: add administrator authentication core"
 - Create: `src/adapters/database/drizzle-admin-repository.ts`
 - Create: `src/adapters/database/drizzle-session-repository.ts`
 - Create: `src/adapters/database/drizzle-settings-repository.ts`
+- Create: `src/adapters/database/drizzle-rate-limit-repository.ts`
 - Create: `src/application/ports/settings-repository.ts`
+- Create: `src/application/ports/rate-limit-repository.ts`
 - Create: `migrations/0001_foundation.sql`
 - Create: `drizzle.config.ts`
 - Test: `tests/integration/database-repositories.test.ts`
@@ -249,25 +256,36 @@ git commit -m "feat: add administrator authentication core"
 **Interfaces:**
 
 - Consumes: Task 2の`AdminRepository`と`SessionRepository`。
-- Produces: `SettingsRepository`とD1・SQLiteで共有するDrizzleリポジトリ。
+- Produces: `SettingsRepository`、`RateLimitRepository`とD1・SQLiteで共有するDrizzleリポジトリ。
 
 - [ ] **Step 1: SQLite上のリポジトリ契約テストを書く**
 
 ```ts
 it('persists an encrypted Filma setting without exposing plaintext', async () => {
   await settings.saveFilmaConnection({
-    apiHost: 'filma.biz',
     encryptedApiKey: 'v1.iv.cipher',
     organizationId: 12,
     apiType: 'fullaccess',
     checkedAt: new Date('2026-09-03T00:00:00Z'),
   })
   expect(await settings.getFilmaConnection()).toMatchObject({
-    apiHost: 'filma.biz',
     encryptedApiKey: 'v1.iv.cipher',
     organizationId: 12,
   })
   expect(JSON.stringify(await dumpTables(db))).not.toContain('plain-api-key')
+})
+
+it('allows no more than the limit under concurrent requests', async () => {
+  const results = await Promise.all(
+    Array.from({ length: 20 }, () =>
+      rateLimits.consume({
+        endpoint: 'admin-login',
+        bucket: 1234,
+        limit: 10,
+      }),
+    ),
+  )
+  expect(results.filter((result) => result.allowed)).toHaveLength(10)
 })
 ```
 
@@ -278,17 +296,17 @@ Expected: FAIL。`admins`テーブルが存在しない。
 
 - [ ] **Step 3: SQLとDrizzleリポジトリを実装する**
 
-`0001_foundation.sql`に`admins`、`sessions`、`app_settings`を作る。メールアドレスはunique、セッショントークンハッシュはprimary key、期限と更新日時はUnix秒で保存する。D1とSQLiteの両方で使えるSQLite方言のみを使用する。
+`0001_foundation.sql`に`admins`、`sessions`、`app_settings`、`request_rate_limits`を作る。メールアドレスはunique、セッショントークンハッシュはprimary key、期限と更新日時はUnix秒で保存する。レート制限はコードで固定したendpoint名、0から4095までのHMAC bucket、固定窓の開始時刻、試行回数を保持し、`PRIMARY KEY(endpoint, bucket)`とする。窓が変わったときは同じ行を上書きし、履歴行を作らない。最大行数は固定endpoint数×4096であり、加算と窓の上書きを単一SQLで原子的に行う。D1とSQLiteの両方で使えるSQLite方言のみを使用する。
 
 - [ ] **Step 4: リポジトリ契約テストを通す**
 
 Run: `pnpm exec vitest run tests/integration/database-repositories.test.ts`
-Expected: PASS。作成・取得・更新・期限切れセッション削除が成功する。
+Expected: PASS。作成・取得・更新・期限切れセッション削除と、並行要求でも上限を超えて許可しないレート制限加算が成功する。複数の固定窓と多数の識別子を処理しても同じbucket行が上書きされ、最大行数を超えないことも確認する。
 
 - [ ] **Step 5: コミットする**
 
 ```bash
-git add src/adapters/database src/application/ports/settings-repository.ts migrations drizzle.config.ts tests/integration/database-repositories.test.ts
+git add src/adapters/database src/application/ports/settings-repository.ts src/application/ports/rate-limit-repository.ts migrations drizzle.config.ts tests/integration/database-repositories.test.ts
 git commit -m "feat: add portable sqlite repositories"
 ```
 
@@ -299,6 +317,7 @@ git commit -m "feat: add portable sqlite repositories"
 - Modify: `src/server/app.ts`
 - Create: `src/server/dependencies.ts`
 - Create: `src/server/middleware/admin-session.ts`
+- Create: `src/server/middleware/request-limits.ts`
 - Create: `src/server/middleware/security.ts`
 - Create: `src/server/routes/setup.ts`
 - Create: `src/server/routes/auth.ts`
@@ -307,8 +326,8 @@ git commit -m "feat: add portable sqlite repositories"
 
 **Interfaces:**
 
-- Consumes: Task 2の認証ユースケース、Task 3のリポジトリ。
-- Produces: `createApp(deps: AppDependencies): Hono`、`POST /api/setup/admin`、`POST /api/auth/login`、`POST /api/auth/logout`、`GET/PATCH /api/admin/profile`。
+- Consumes: Task 2の認証ユースケース、Task 3のリポジトリと`RateLimitRepository`、ランタイムが検証したクライアント識別子。
+- Produces: `createApp(deps: AppDependencies): Hono`、`POST /api/setup/admin`、`POST /api/auth/login`、`POST /api/auth/logout`、`GET/PATCH /api/admin/profile`、共通の入力上限・レート制限ミドルウェア。
 
 - [ ] **Step 1: Cookie認証フローの失敗テストを書く**
 
@@ -341,12 +360,12 @@ Expected: FAIL。ログイン応答が404になる。
 
 - [ ] **Step 3: APIとセキュリティ境界を実装する**
 
-JSON入力はZodで検証する。状態変更APIは`Origin`がリクエストURLと同一オリジンであることを確認する。Cookieは`HttpOnly; SameSite=Lax; Path=/`、本番では`Secure`を付ける。全応答に`X-Content-Type-Options: nosniff`、`Referrer-Policy: no-referrer`、`Content-Security-Policy`を付ける。
+JSON入力は16 KiBを上限として超過時は413を返し、Zodで検証する。初期登録とログインは、エンドポイントとランタイムが検証したクライアント識別子をキーに、10分の固定窓で10回まで許可する。DBにはIPアドレスを保存せず、アプリケーション秘密鍵からWeb Cryptoで導出したHMAC値の先頭12 bitを0から4095までのbucketとして保存する。超過時は`Retry-After`付き429、レート制限DBの障害時は503として安全側に閉じる。Cloudflareは`CF-Connecting-IP`、Node.jsはsocket remote addressをランタイム側で検証して渡し、Node.jsでは明示したtrusted proxy以外の転送ヘッダーを信用しない。状態変更APIは`Origin`がリクエストURLと同一オリジンであることを確認する。Cookieは`HttpOnly; SameSite=Lax; Path=/`、本番では`Secure`を付ける。全応答に`X-Content-Type-Options: nosniff`、`Referrer-Policy: no-referrer`、`Content-Security-Policy`を付ける。
 
 - [ ] **Step 4: APIテストを通す**
 
 Run: `pnpm exec vitest run tests/integration/admin-api.test.ts`
-Expected: PASS。未認証は401、不正Originは403、初期登録の二回目は409になる。
+Expected: PASS。未認証は401、不正Originは403、初期登録の二回目は409、16 KiB超過は413、11回目は`Retry-After`付き429になる。固定窓の境界、並行要求、レート制限DB障害時に安全側に閉じることも確認する。
 
 - [ ] **Step 5: コミットする**
 
@@ -370,20 +389,16 @@ git commit -m "feat: expose secure administrator API"
 
 **Interfaces:**
 
-- Consumes: `SecretBox`、`SettingsRepository`、Filma API `POST /filmaapi/token`。
+- Consumes: `SecretBox`、`SettingsRepository`、`RateLimitRepository`、Filma API `POST /filmaapi/token`。
 - Produces: `FilmaClient.verifyApiKey()`、`configureFilma()`、`GET/PUT /api/admin/filma-settings`。
 
 - [ ] **Step 1: APIキーが保存前に検証・暗号化される失敗テストを書く**
 
 ```ts
 it('verifies and encrypts the API key before saving', async () => {
-  await configureFilma(deps, { apiHost: 'filma.biz', apiKey: 'secret-key' })
-  expect(filma.requests[0]).toEqual({
-    apiHost: 'filma.biz',
-    apiKey: 'secret-key',
-  })
+  await configureFilma(deps, { apiKey: 'secret-key' })
+  expect(filma.requests[0]).toEqual({ apiKey: 'secret-key' })
   expect(settings.saved).toMatchObject({
-    apiHost: 'filma.biz',
     encryptedApiKey: 'encrypted:secret-key',
     organizationId: 42,
     apiType: 'fullaccess',
@@ -406,19 +421,16 @@ export type FilmaConnection = {
 }
 
 export interface FilmaClient {
-  verifyApiKey(input: {
-    apiHost: string
-    apiKey: string
-  }): Promise<FilmaConnection>
+  verifyApiKey(input: { apiKey: string }): Promise<FilmaConnection>
 }
 ```
 
-クライアントは`https://${apiHost}/filmaapi/token`へPOSTし、`X-Api-Key`と`Content-Type: application/json`を送る。200のみ成功とし、401を`INVALID_API_KEY`、403を`DOMAIN_NOT_ALLOWED`、その他の4xx・5xxとネットワーク失敗を`FILMA_UNAVAILABLE`へ変換する。応答から`organization_id`と`api_type`だけを返し、JWTは保持しない。
+管理画面と設定APIはAPIキーだけを受け取り、送信先を変更させない。`PUT /api/admin/filma-settings`はTask 4と同じ`RateLimitRepository`を使い、エンドポイントと検証済みクライアント識別子のbucketごとに10分で5回まで許可する。超過時は`Retry-After`付き429、DB障害時は503として安全側に閉じ、並行要求でも上限を超えてFilmaへ送信しない。ランタイムはFilmaクライアントを信頼済みの固定URL`https://filma.biz/filmaapi/token`で構築する。クライアントは`X-Api-Key`と`Content-Type: application/json`を送信し、`redirect: 'error'`でリダイレクトを拒否する。タイムアウトは5秒、応答は64 KiBを上限とし、自動再試行しない。200のみ成功とし、401を`INVALID_API_KEY`、403を`DOMAIN_NOT_ALLOWED`、その他の4xx・5xx、タイムアウト、応答上限超過、ネットワーク失敗を`FILMA_UNAVAILABLE`へ変換する。応答から`organization_id`と`api_type`だけを返し、JWTは保持しない。
 
 - [ ] **Step 4: 単体・HTTP・APIテストを通す**
 
 Run: `pnpm exec vitest run tests/unit/configure-filma.test.ts tests/integration/http-filma-client.test.ts tests/integration/filma-settings-api.test.ts`
-Expected: PASS。APIキーがURL、レスポンス、保存データ、エラー文字列へ現れない。
+Expected: PASS。APIキーがURL、レスポンス、保存データ、エラー文字列へ現れない。設定APIが送信先を受け付けず、リダイレクト、5秒超過、64 KiB超過を拒否し、失敗時に自動再試行しないことも確認する。6回目は`Retry-After`付き429、レート制限DB障害は503となり、並行要求でも5回を超えてFilmaへ送信しない。
 
 - [ ] **Step 5: コミットする**
 
@@ -455,7 +467,6 @@ it('shows connection metadata without rendering the saved API key', async () => 
     <FilmaSettingsPage
       api={fakeApi({
         configured: true,
-        apiHost: 'filma.biz',
         organizationId: 42,
         apiType: 'fullaccess',
         checkedAt: '2026-09-03T00:00:00.000Z',
@@ -504,6 +515,8 @@ git commit -m "feat: add administrator onboarding UI"
 - Create: `deploy/docker/entrypoint.sh`
 - Create: `scripts/check-worker-size.mjs`
 - Create: `tests/unit/runtime-config.test.ts`
+- Verify: `src/adapters/filma/live-contract.ts`
+- Test: `tests/unit/filma-live-contract.test.ts`
 - Create: `docs/operations/cloudflare.md`
 - Create: `docs/operations/docker.md`
 - Modify: `README.md`
@@ -536,7 +549,7 @@ Expected: FAIL。`parseRuntimeConfig`が存在しない。
 
 - [ ] **Step 3: CloudflareとDockerの起動構成を実装する**
 
-`wrangler.jsonc`にはD1 binding `DB`、R2 binding `MEDIA`、assets binding `ASSETS`を定義する。`.dev.vars.example`には`PLAY_SESSION_SECRET`、`PLAY_ENCRYPTION_KEY`、`FILMA_API_HOST=filma.biz`を記載する。`package.json.cloudflare.bindings`で二つのsecret生成方法を説明する。READMEのボタンは次を使う。
+`wrangler.jsonc`にはD1 binding `DB`、R2 binding `MEDIA`、assets binding `ASSETS`を定義する。`.dev.vars.example`のruntime欄には`PLAY_SESSION_SECRET`と`PLAY_ENCRYPTION_KEY`のダミー値を記載し、live test専用欄には`FILMA_LIVE_API_KEY=replace-with-dedicated-test-key`を残す。本番ランタイムは`FILMA_LIVE_API_KEY`を読まず、Issue #6で導入したlive testを含むFilma送信先は`https://filma.biz/filmaapi/token`へ固定する。`FILMA_API_HOST`は定義せず、管理画面や環境変数から送信先を変更させない。live testも5秒のタイムアウト、64 KiBの応答上限、自動再試行しない契約を維持する。`package.json.cloudflare.bindings`で二つのruntime secret生成方法を説明する。READMEのボタンは次を使う。
 
 ```md
 [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/rytich/play-cms)
@@ -546,8 +559,8 @@ Dockerは非rootユーザーでNode.jsサーバーを起動し、`/data/play-cms
 
 - [ ] **Step 4: 両ランタイムのテストとビルドを通す**
 
-Run: `pnpm exec vitest run tests/unit/runtime-config.test.ts && pnpm build:ui && pnpm build:worker && pnpm build:node && docker build -t play-cms:test .`
-Expected: PASS。三つのビルドとDockerイメージ作成がexit 0になる。
+Run: `pnpm exec vitest run tests/unit/filma-live-contract.test.ts tests/unit/runtime-config.test.ts && pnpm build:ui && pnpm build:worker && pnpm build:node && docker build -t play-cms:test .`
+Expected: PASS。live test契約が固定送信先、5秒のタイムアウト、chunkedを含む64 KiBの応答上限、失敗時に自動再試行しないことを防御テストで確認する。三つのビルドとDockerイメージ作成がexit 0になる。
 
 - [ ] **Step 5: Workerサイズを確認する**
 
