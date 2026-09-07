@@ -578,6 +578,8 @@ git commit -m "feat: add Cloudflare and Docker deployment targets"
 
 ### Task 8: CIと最終文書
 
+CIとマージ保護のみ[最小構成](../../development/minimal-guardrails.md)で先行導入する。Tracking: [Issue #12](https://github.com/rytich/play-cms/issues/12) / [Issue #13](https://github.com/rytich/play-cms/issues/13) / [Issue #14](https://github.com/rytich/play-cms/issues/14)。導入PRは#12・#13を統合し、CI成功確認後、初回Merge前に#14の保護を適用する。正本文書の完成、Workerサイズ、Docker等の残りは本Taskに残し、現段階のCIには含めない。
+
 **Files:**
 
 - Create: `.github/workflows/ci.yml`
