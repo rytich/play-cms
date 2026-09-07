@@ -6,9 +6,13 @@
 
 **Architecture:** Hono Workerを唯一のHTTP境界とし、React SPA、D1、Web Crypto、固定送信先のFilma adapterを接続する。ドメインとapplicationはCloudflare型を参照せず、D1・Filma・暗号をadapterへ閉じ込める。各縦切りは独立Issue、feature branch、PR、正確なhead SHAへのknryt承認を経て`develop`へ入れる。
 
-**Tech Stack:** TypeScript strict、Hono、React、Vite、Cloudflare Vite plugin、Workers、D1、Drizzle ORM、Web Crypto、Vitest 4、Cloudflare Vitest integration
+**Tech Stack:** TypeScript strict、Hono、React、Vite、Cloudflare Vite plugin、Workers、D1、Drizzle ORM、Web Crypto、Vitest 4、`@cloudflare/vitest-plugin`
 
 **Spec:** [P0プロトタイプ設計](../specs/2026-09-07-p0-prototype-design.md)
+
+**Tracking:** [GitHub Issue #10](https://github.com/rytich/play-cms/issues/10)
+
+**Related:** [基盤設計](../specs/2026-09-03-foundation-design.md) / [`SECURITY.md`](../../../SECURITY.md)
 
 ## Global Constraints
 
@@ -16,12 +20,12 @@
 - CMSからの動画アップロード、解析、DRM、サムネイル、メール確認、Node.js、Docker、Deploy to Cloudflareボタンは追加しない。
 - それぞれのTask開始前にGitHub Issueを作り、その番号をbranch、commit、PR、関連文書へ記録する。実装中はIssueコメントを更新する。
 - PRは`develop`をbaseにし、`pnpm verify`とTask固有テストを通す。knrytが現在のhead SHAをApproveするまでmergeしない。head変更後は再レビューする。
-- APIキー、パスワード、アクセスコード、Cookie、認証ヘッダー、Filma識別子・JWT・再生URL・レスポンス本文をGit、Issue、PR、テストfixture、ログへ残さない。
+- APIキー、bootstrap token、rate-limit key、パスワード、アクセスコード、Cookie、認証ヘッダー、Filma識別子・JWT・再生URL・レスポンス本文をGit、Issue、PR、テストfixture、ログへ残さない。
 - 公開APIは16 KiB以下のJSONだけを受け、余分なfield、異なるContent-Type、異なるOriginを拒否する。未定義routeは404とする。
 - 視聴者向けでは`draft`、公開前、期限切れをすべて404へ畳み、title、description、Filma ID、再生情報を返さない。
 - Filma通信は検証済みHTTPS URLのallowlist、`redirect: 'error'`、5秒timeout、64 KiB response上限、自動retryなしを守る。
 - Cloudflare Free枠は設計目標であり保証ではない。P0はR2を使わず、D1とWorkerの使用量を試験期間中に記録する。
-- Context7で2026-09-07に確認した現行Cloudflare構成を採用する。Viteは`@cloudflare/vite-plugin`、Workers runtime testはVitest 4用`@cloudflare/vitest-pool-workers`、D1 migrationは`wrangler.jsonc`のbindingを基準に適用する。
+- Context7で2026-09-07に確認した現行Cloudflare構成を採用する。Viteは`@cloudflare/vite-plugin`、Workers runtime testはVitest 4.1以上と`@cloudflare/vitest-plugin`、D1 migrationは`wrangler.jsonc`のbindingを基準に適用する。
 
 ## Target File Structure
 
@@ -191,7 +195,7 @@ unset FILMA_LIVE_API_KEY
 - 認証方式: 確認済み方式の分類
 - 動画存在確認: HTTP method、固定path、必要field名、status分類
 - 再生情報取得: HTTP method、固定path、必要field名、status分類
-- 有効期限: server responseから確認できる単位
+- 有効期限: 非null期限を取得し、CMS指定`notAfter`以前に失効させる方法
 - domain制限: APIまたはFilma設定で確認した方法
 - 保存禁止: API key、JWT、video ID、playback URL、response本文
 - 結論: GO または NO-GO
@@ -221,15 +225,16 @@ describe('Filma playback contract', () => {
     ).rejects.toMatchObject({ category: 'upstream_contract' })
   })
 
-  it('returns only a short-lived HTTPS playback grant', async () => {
-    const client = buildFilmaClient({ fetch: successfulFetchFixture })
+  it('rejects a playback grant that exceeds the CMS deadline', async () => {
+    const client = buildFilmaClient({ fetch: overlongGrantFetchFixture })
 
     await expect(
-      client.issuePlayback({ apiKey: 'test-key', videoId: 'v-test' }),
-    ).resolves.toEqual({
-      playbackUrl: 'https://verified-filma-host.example/play',
-      expiresAt: null,
-    })
+      client.issuePlayback({
+        apiKey: 'test-key',
+        videoId: 'v-test',
+        notAfter: '2026-09-07T00:05:00.000Z',
+      }),
+    ).rejects.toMatchObject({ category: 'upstream_contract' })
   })
 })
 ```
@@ -251,7 +256,7 @@ pnpm vitest run tests/unit/filma-playback-contract.test.ts
 ```ts
 export type FilmaPlaybackGrant = Readonly<{
   playbackUrl: string
-  expiresAt: string | null
+  expiresAt: string
 }>
 
 export interface FilmaClient {
@@ -262,11 +267,14 @@ export interface FilmaClient {
   issuePlayback(input: {
     apiKey: string
     videoId: string
+    notAfter: string
   }): Promise<FilmaPlaybackGrant>
 }
 ```
 
 `http-filma-client.ts`は契約文書でGOになったmethod、固定host、固定pathだけを実装する。URLは`new URL()`でHTTPSとallowlistを再検証し、redirectを拒否する。response bodyはstream読込中に64 KiBで中断し、errorは`authentication`、`not_found`、`unavailable`、`upstream_contract`へ変換する。
+
+再生契約は非nullの`expiresAt`と許可済みCMS domainでの利用制限を必須とする。adapterは`expiresAt <= notAfter`を検証し、期限不明、期限超過、domain制限未確認を`upstream_contract`として拒否する。`notAfter`はapplicationが`min(現在+5分, 動画終了)`で計算する。既発行grantが動画期限後に無効になることをlive testまたは公式仕様で確認できなければGOにしない。
 
 - [ ] **Step 8: GREENと明示live testを確認する**
 
@@ -281,7 +289,7 @@ pnpm verify
 git diff --check origin/develop...HEAD
 ```
 
-期待結果: unit contractとread-only live contractが成功し、実値を出力しない。
+期待結果: unit contractとread-only live contractが成功し、実値を出力しない。非nullの期限、`notAfter`以下の期限、許可済みCMS domainでの利用制限、動画終了後の既発行grant無効化をすべて確認できた場合だけGOとする。一つでも未確認ならNO-GOとしてTask 3へ進まない。
 
 - [ ] **Step 9: commit、push、レビューする**
 
@@ -313,6 +321,10 @@ IssueへGO/NO-GO、確認項目、検証command、head SHAだけを記録する�
 - Create: `src/adapters/database/d1-repositories.ts`
 - Create: `src/adapters/database/schema.ts`
 - Create: `src/adapters/secrets/web-crypto.ts`
+- Create: `spikes/password-hash-benchmark/worker.ts`
+- Create: `spikes/password-hash-benchmark/wrangler.jsonc`
+- Create: `scripts/run-password-hash-benchmark.mjs`
+- Create: `docs/development/password-hash-benchmark.md`
 - Create: `src/server/dependencies.ts`
 - Create: `src/server/middleware/security.ts`
 - Create: `src/server/routes/admin.ts`
@@ -329,22 +341,62 @@ IssueへGO/NO-GO、確認項目、検証command、head SHAだけを記録する�
 - Create: `tests/worker/admin-setup.test.ts`
 - Create: `vitest.worker.config.ts`
 - Modify: `vite.config.ts`
+- Modify: `tsconfig.json`
 - Modify: `package.json`
 
 - [ ] **Step 1: 現行Cloudflare依存を追加する**
 
 ```bash
 pnpm add drizzle-orm zod
-pnpm add -D @cloudflare/vite-plugin @cloudflare/vitest-pool-workers wrangler
+pnpm add -D @cloudflare/vite-plugin @cloudflare/vitest-plugin wrangler
 ```
 
 lockfileをcommitし、追加理由をPRの「依存パッケージ」に記録する。認証libraryを追加せず、Web Cryptoと短いapplication codeで必要範囲だけ実装する。
 
-`wrangler.jsonc`は`main: "./src/worker.ts"`、`assets.directory: "./dist"`、`assets.not_found_handling: "single-page-application"`、`assets.run_worker_first: ["/api/*"]`、D1 binding `DATABASE`を定義する。`vite.config.ts`はReact pluginと`@cloudflare/vite-plugin`の`cloudflare()`を使い、rootを`src/ui`へ移す。
+`package.json`へ次のscriptを明示的に追加し、`verify`は`test:worker`と`build`も実行するよう更新する。
+
+```json
+{
+  "scripts": {
+    "build": "vite build",
+    "build:ui": "vite build",
+    "test:worker": "vitest run --config vitest.worker.config.ts",
+    "test:filma:live": "node --env-file-if-exists=.dev.vars ./node_modules/vitest/vitest.mjs run --config vitest.live.config.ts",
+    "test:p0:smoke": "node --env-file-if-exists=.dev.vars ./node_modules/vitest/vitest.mjs run --config vitest.live.config.ts tests/live/p0-smoke.live.test.ts",
+    "deploy:p0": "pnpm build && wrangler deploy --env production",
+    "verify": "pnpm lint && pnpm typecheck && pnpm test && pnpm test:worker && pnpm build && pnpm format:check"
+  }
+}
+```
+
+`tsconfig.json`のtest用typesには`@cloudflare/vitest-plugin/types`を追加する。旧pool形式のpackageは導入しない。
+
+Cloudflare開発用D1を次のcommandで作り、出力されたIDを`wrangler.jsonc`へ記録する。D1 IDはcredentialではないが、Issue、PR、logへ転記しない。
+
+```bash
+pnpm wrangler d1 create play-cms-p0-dev
+pnpm wrangler types
+pnpm wrangler d1 migrations apply play-cms-p0-dev --local
+```
+
+`wrangler.jsonc`は`name: "play-cms-p0-dev"`、`compatibility_date: "2026-09-07"`、`main: "./src/worker.ts"`、`assets.directory: "./dist"`、`assets.not_found_handling: "single-page-application"`、`assets.run_worker_first: ["/api/*", "/v/*"]`を定義する。`d1_databases`にはbinding `DATABASE`、database name `play-cms-p0-dev`、作成commandが返した`database_id`、`migrations_dir: "migrations"`を設定する。
+
+`vite.config.ts`はReact pluginと`@cloudflare/vite-plugin`の`cloudflare()`を使い、rootを`src/ui`へ移す。開発・自動testはlocal D1だけを使い、`--remote` migrationはTask 6まで実行しない。
 
 - [ ] **Step 2: Free枠でのpassword hash実行可能性を先に測る**
 
-OWASPのPBKDF2-HMAC-SHA-256推奨値600,000 iterationsを実装候補とする。Cloudflare Workers FreeのHTTP request CPU上限は2026-09-07時点で10 msのため、専用preview Workerでhashとverifyを各20回実行し、Cloudflare MetricsのCPU timeとError 1102有無を記録する。
+OWASPのPBKDF2-HMAC-SHA-256推奨値600,000 iterationsを実装候補とする。Cloudflare Workers FreeのHTTP request CPU上限は2026-09-07時点で10 msのため、専用benchmark Workerで実測する。
+
+`spikes/password-hash-benchmark/worker.ts`は128 UTF-8 byteの固定test passwordを用い、1 requestにつきhashまたはverifyを一回だけ実行する。`BENCHMARK_TOKEN` Worker secretが一致する要求だけを受け、password、salt、hashをresponseやlogへ出さない。`scripts/run-password-hash-benchmark.mjs`は送信先を`BENCHMARK_BASE_URL`、認証値を`BENCHMARK_TOKEN`から読み、どちらかが未設定なら実行を拒否する。hash 20 request、verify 20 requestを直列に送り、statusとwall timeだけを記録し、token値をcommand line、log、Issue、PRへ出さない。
+
+```bash
+pnpm wrangler secret put BENCHMARK_TOKEN --config spikes/password-hash-benchmark/wrangler.jsonc
+pnpm wrangler deploy --config spikes/password-hash-benchmark/wrangler.jsonc
+node scripts/run-password-hash-benchmark.mjs
+pnpm wrangler delete --name play-cms-password-benchmark
+```
+
+Cloudflare Metricsで40 requestのCPU timeを確認し、hash・verifyの両方でP95が8 ms以下、Error 1102が0件、HTTP失敗が0件の場合だけGOとする。20%のheadroomを満たさない場合やmetricsを確認できない場合もNO-GOとする。`docs/development/password-hash-benchmark.md`へ日付、runtime/package version、request数、P50/P95/max CPU、1102件数、GO/NO-GO、削除確認だけを記録する。
 
 600,000 iterationsが継続的に上限を超える場合、iterationを独自判断で下げない。Task 3を停止し、Workers Paid、外部認証、P0のpasswordless化のいずれを選ぶかを別ADRで決定する。
 
@@ -356,7 +408,10 @@ OWASPのPBKDF2-HMAC-SHA-256推奨値600,000 iterationsを実装候補とする�
 it('creates exactly one admin and never returns secrets', async () => {
   const first = await SELF.fetch('https://example.test/api/admin/setup', {
     method: 'POST',
-    headers: jsonSameOriginHeaders,
+    headers: {
+      ...jsonSameOriginHeaders,
+      'X-Play-Bootstrap-Token': 'test-bootstrap-token',
+    },
     body: JSON.stringify({
       email: 'admin@example.test',
       password: 'correct horse battery staple',
@@ -377,7 +432,7 @@ it('creates exactly one admin and never returns secrets', async () => {
 })
 ```
 
-同じfileにlogin成功、Cookie属性、誤password、admin routeのrole拒否、16 KiB超過、余分なfield、Origin不一致、rate limit fail-closedを追加する。
+同じfileにbootstrap tokenの未指定・不一致・使用済み・並行要求、login成功、Cookie属性、誤password、admin routeのrole拒否、16 KiB超過、余分なfield、Origin不一致、rate limit fail-closedを追加する。tokenの失敗理由と管理者作成済みは同じ404本文になることも検証する。
 
 - [ ] **Step 4: REDを確認する**
 
@@ -397,13 +452,15 @@ CREATE UNIQUE INDEX one_redemption_per_code ON redemptions(code_id);
 CREATE UNIQUE INDEX one_entitlement_per_video ON entitlements(account_id, video_id);
 ```
 
-emailは正規化値をuniqueにし、sessionとaccess codeはhashだけを保存する。外部キーを有効化し、application transactionとDB制約の両方で一意性を守る。
+emailは正規化値をuniqueにし、sessionとaccess codeはhashだけを保存する。`app_settings.bootstrap_consumed_at`とadmin作成を同じtransactionで更新する。外部キーを有効化し、application transactionとDB制約の両方で一意性を守る。
+
+`rate_limits`は`endpoint`、keyed HMAC済み`bucket`、`window_started_at`、`attempts`、`expires_at`を持つ。閾値はP0設計の「レート制限契約」に固定し、clientは本番では`CF-Connecting-IP`だけから導出する。ログインとコード入力のように二つのbucketを使うrouteは、両counterの原子的UPSERTが成功した場合だけ後続処理へ進む。超過時は`Retry-After`付き429、D1またはHMAC失敗時は外部通信前に503とする。各更新時に`expires_at`を過ぎた行を最大100件削除し、上限なしのcleanupを行わない。
 
 - [ ] **Step 6: password、session、secret保存を実装する**
 
-`web-crypto.ts`はPBKDF2-HMAC-SHA-256、ランダムsalt、600,000 iterationsを用いてpasswordを保存し、比較は固定時間で行う。Filma API keyは`PLAY_ENCRYPTION_KEY`からAES-GCMで暗号化し、nonceを暗号文と別fieldに保存する。session tokenは128 bit以上の乱数を生成し、D1にはSHA-256 hashだけを保存する。
+`web-crypto.ts`はPBKDF2-HMAC-SHA-256、ランダムsalt、600,000 iterationsを用いてpasswordを保存し、比較は固定時間で行う。初期設定では256 bit以上の`PLAY_BOOTSTRAP_TOKEN`を固定時間で比較し、使用済み状態も確認する。Filma API keyは`PLAY_ENCRYPTION_KEY`からAES-GCMで暗号化し、nonceを暗号文と別fieldに保存する。session tokenは128 bit以上の乱数を生成し、D1にはSHA-256 hashだけを保存する。rate-limit bucketは`PLAY_RATE_LIMIT_KEY`によるHMAC-SHA-256から作る。
 
-secret未設定、復号失敗、乱数生成失敗はstartupまたはrequestを503で安全側に閉じる。
+`PLAY_BOOTSTRAP_TOKEN`、`PLAY_SESSION_SECRET`、`PLAY_ENCRYPTION_KEY`、`PLAY_RATE_LIMIT_KEY`の未設定、復号失敗、乱数生成失敗はstartupまたはrequestを503で安全側に閉じる。
 
 - [ ] **Step 7: use case、route、最小UIを実装する**
 
@@ -417,7 +474,7 @@ GET  /api/admin/filma
 PUT  /api/admin/filma
 ```
 
-setupはadmin 0件のときだけ有効、loginはroleをsessionへ結び付ける。Filma設定はTask 2の`verifyApiKey()`成功後だけ暗号化して置換し、responseは`{ configured, verifiedAt }`だけを返す。UIは`/admin/setup`、`/admin/login`、`/admin/filma`を提供し、API keyを再表示しない。
+setupは有効なbootstrap token、admin 0件、bootstrap未使用のすべてを満たす場合だけ有効とし、admin作成とtoken消費を原子的に行う。loginはroleをsessionへ結び付ける。Filma設定はTask 2の`verifyApiKey()`成功後だけ暗号化して置換し、responseは`{ configured, verifiedAt }`だけを返す。UIは`/admin/setup`、`/admin/login`、`/admin/filma`を提供し、bootstrap tokenとAPI keyを再表示しない。
 
 - [ ] **Step 8: GREENと全検証を確認する**
 
@@ -524,11 +581,14 @@ POST  /api/admin/codes/:id/revoke
 ```text
 POST /api/public/videos/:publicId/redeem
 GET  /api/public/videos/:publicId/playback
+GET  /v/:publicId
 ```
 
 `redeem`はD1 transactionで、動画availability、code hash、未取消、未使用を確認し、redemptionと匿名sessionを一度に作る。unique制約違反は汎用404へ畳む。匿名Cookieは`HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=1800`とする。
 
-`playback`は要求ごとにavailabilityと匿名sessionを再確認し、Task 2の`issuePlayback()`を呼ぶ。playback URL/JWTをD1、log、localStorage、sessionStorageへ保存しない。
+`playback`は要求ごとにavailabilityと匿名sessionを再確認し、`notAfter = min(現在+5分, 動画終了)`を計算してTask 2の`issuePlayback()`を呼ぶ。非nullの`expiresAt <= notAfter`を再確認し、違反時は503とする。playback URL/JWTをD1、log、localStorage、sessionStorageへ保存しない。
+
+`/v/:publicId`は`assets.run_worker_first`によりWorkerで先に処理する。動画が`published`かつ期間内の場合だけ`env.ASSETS.fetch()`で汎用SPA shellを返し、`draft`、公開前、期限切れ、不明IDは本文に動画情報を含まないHTTP 404を返す。これによりcode入力前でも期限外動画の存在をSPA fallbackから推測させない。
 
 - [ ] **Step 6: 最小管理UIと視聴UIを実装する**
 
@@ -668,6 +728,8 @@ PRには二つの権利取得経路、期限切れ非表示、role分離のtest�
 
 - Create: `tests/worker/security-boundaries.test.ts`
 - Create: `tests/live/p0-smoke.live.test.ts`
+- Create: `scripts/check-secrets.mjs`
+- Create: `tests/unit/check-secrets.test.ts`
 - Create: `docs/operations/cloudflare-p0-deploy.md`
 - Create: `docs/product/p0-test-script.md`
 - Modify: `README.md`
@@ -687,11 +749,11 @@ draft            404          404     404                 非表示   404
 期限切れ           404          404     404                 非表示   404
 ```
 
-404本文にtitle、description、Filma ID、playback hostが含まれないことも検証する。
+404本文にtitle、description、Filma ID、playback hostが含まれないことも検証する。公開中に発行したgrantの`expiresAt`が`min(現在+5分, 動画終了)`以下であり、動画終了後に同じgrantまたは再生routeから再生できないことをFake Filmaとlive contractの両方で確認する。
 
 - [ ] **Step 2: abuse境界の失敗testを追加する**
 
-login、register、redeem、Filma接続について、上限到達時の`429`と`Retry-After`、D1障害時の503を検証する。JSON 16 KiB超過、unknown field、Origin不一致、Content-Type不一致、admin/viewer role逆転、未定義routeも検証する。
+P0設計の閾値表どおりにsetup、loginのclient/account、register、redeemのclient/public ID、Filma接続、playbackを検証する。各窓で上限までは成功し、次の一回が`Retry-After`付き429、窓終了時にcounterがresetされること、並行要求で上限を超えないこと、D1・HMAC・本番client IP欠落時に外部通信前の503となることを確認する。JSON 16 KiB超過、unknown field、Origin不一致、Content-Type不一致、admin/viewer role逆転、未定義routeも検証する。
 
 - [ ] **Step 3: REDを確認し、必要最小限の修正だけを行う**
 
@@ -703,20 +765,28 @@ pnpm vitest run --config vitest.worker.config.ts tests/worker/security-boundarie
 
 - [ ] **Step 4: deploy手順とrollbackを文書化する**
 
-`docs/operations/cloudflare-p0-deploy.md`は実値を含めず、次の順序を固定する。
+`docs/operations/cloudflare-p0-deploy.md`は実値を含めず、次の順序を固定する。最初にproduction D1を作成し、出力された`database_name`と`database_id`を`wrangler.jsonc`の`env.production.d1_databases`へ設定する。bindingは`DATABASE`、`migrations_dir`は`migrations`に固定する。開発用`play-cms-p0-dev`とproduction `play-cms-p0`のIDを取り違えていないことをaccount名とdatabase名で確認する。
+
+`wrangler.jsonc`の`env.production`にはWorker名`play-cms-p0`、rootと同じ`compatibility_date`、`assets.directory`、`assets.binding`、`assets.run_worker_first: ["/api/*", "/v/*"]`、上記D1 bindingを明示する。preview/localは開発用D1、production deployとremote migrationはproduction D1だけを参照し、設定生成後に`pnpm wrangler types`でbinding型を更新する。
 
 ```bash
+pnpm wrangler whoami
+pnpm wrangler d1 create play-cms-p0
+pnpm wrangler types
 pnpm verify
 pnpm build
-pnpm wrangler d1 migrations apply play-cms-p0 --remote
-pnpm wrangler secret put PLAY_SESSION_SECRET
-pnpm wrangler secret put PLAY_ENCRYPTION_KEY
-pnpm wrangler deploy
+pnpm wrangler deploy --dry-run --env production
+pnpm wrangler d1 migrations apply play-cms-p0 --remote --env production
+pnpm wrangler secret put PLAY_BOOTSTRAP_TOKEN --env production
+pnpm wrangler secret put PLAY_SESSION_SECRET --env production
+pnpm wrangler secret put PLAY_ENCRYPTION_KEY --env production
+pnpm wrangler secret put PLAY_RATE_LIMIT_KEY --env production
+pnpm deploy:p0
 ```
 
-文書にはD1 backup/exportの確認、前Worker versionへのrollback、招待試験終了後のroute停止、secret rotationを含める。Cloudflare dashboardのaccount ID、database ID、route、secret値は例示しない。
+すべての`secret put`はproduction environmentを明示する。初期登録後は`PLAY_BOOTSTRAP_TOKEN`を削除またはrotationし、DBの`bootstrap_consumed_at`でも再利用を拒否する。文書にはlocal/production migrationの違い、D1 backup/exportの確認、前Worker versionへのrollback、招待試験終了後のroute停止、残るsecretのrotationを含める。Cloudflare dashboardのaccount ID、database ID、route、secret値は例示しない。
 
-- [ ] **Step 5: read-only P0 smoke testを作成する**
+- [ ] **Step 5: non-destructive P0 smoke testを作成する**
 
 `tests/live/p0-smoke.live.test.ts`は、事前作成済みのtest account/videoを使い、次だけを確認する。
 
@@ -727,19 +797,24 @@ libraryに期限内videoが1件以上ある
 playback grantがHTTPSで取得できる
 ```
 
-通常の`pnpm test`と公開CIから除外し、`PLAY_CMS_LIVE_BASE_URL`などの明示environmentが揃った場合だけ専用scriptで動かす。codeを消費したりFilma dataを変更したりしない。
+通常の`pnpm test`と公開CIから除外し、`PLAY_CMS_LIVE_BASE_URL`などの明示environmentが揃った場合だけ`pnpm test:p0:smoke`で動かす。codeを消費したりFilma dataを変更したりしないが、login sessionとrate-limit行は作成する。専用test accountだけを使い、sessionは30分、rate-limit行は窓終了24時間後までに自動削除されることを記録する。
 
 - [ ] **Step 6: 全検証とsecret scanを実行する**
+
+`package.json`へ`"check:secrets": "node scripts/check-secrets.mjs"`を追加する。
 
 ```bash
 pnpm verify
 pnpm build
 pnpm vitest run --config vitest.worker.config.ts
+pnpm check:secrets
 git diff --check origin/develop...HEAD
-rg -n "FILMA_LIVE_|PLAY_SESSION_SECRET|PLAY_ENCRYPTION_KEY|Bearer |Set-Cookie" --glob '!docs/superpowers/plans/*' .
+rg -n "FILMA_LIVE_|PLAY_BOOTSTRAP_TOKEN|PLAY_SESSION_SECRET|PLAY_ENCRYPTION_KEY|PLAY_RATE_LIMIT_KEY" .
 ```
 
-最後の検索は変数名と禁止patternの確認であり、実値が見つかった場合はcommitせず削除・rotationする。
+`scripts/check-secrets.mjs`はtracked fileだけを対象に、private key header、GitHub/AWS既知token形式、JWT形式、headerへ埋め込まれたBearer/API key、`*_SECRET=`と`FILMA_LIVE_API_KEY=`の非placeholder値を検出する。`replace-with-`で始まる文書用値と変数名単体だけをallowlistとし、検出文字列は`[REDACTED]`へ置換してpath・lineだけを出力する。`tests/unit/check-secrets.test.ts`で検出例と許可例を固定する。
+
+最後の`rg`は予約変数名の配置監査であり、値の検出には使わない。`pnpm check:secrets`が値を検出した場合はcommitせず、Git履歴に入った可能性があれば当該credentialをrotationする。
 
 - [ ] **Step 7: manual deployし、invite testを実施する**
 
@@ -767,6 +842,8 @@ P0完了は次をすべて満たす場合だけ宣言する。
 - [ ] 匿名権利が30分以内だけ移行でき、viewer entitlementで再login後に視聴できる。
 - [ ] `draft`、公開前、期限切れの動画情報がすべてのviewer routeから隠れる。
 - [ ] API key、password、code、session token、Filma再生情報が平文保存・log・Gitへ残らない。
+- [ ] 初期管理者登録がbootstrap tokenで保護され、使用後の同じtokenを再利用できない。
+- [ ] Filma playback grantが非null期限を持ち、`min(現在+5分, 動画終了)`を超えず、期限後に再利用できない。
 - [ ] Cloudflareへ手動deployでき、rollback手順を確認している。
 - [ ] 3〜5名の招待試験結果を個人情報なしでIssueへ記録している。
 - [ ] deferred scopeを誤って実装していない。
@@ -776,6 +853,8 @@ P0完了は次をすべて満たす場合だけ宣言する。
 - Cloudflare Vite plugin: <https://developers.cloudflare.com/workers/vite-plugin/>
 - Cloudflare SPA routing: <https://developers.cloudflare.com/workers/static-assets/routing/single-page-application/>
 - Cloudflare Vitest integration: <https://developers.cloudflare.com/workers/testing/vitest-integration/>
+- Cloudflare Vitest plugin migration: <https://developers.cloudflare.com/workers/testing/vitest-integration/migration-guides/migrate-to-vitest-plugin/>
+- D1 create and configuration: <https://developers.cloudflare.com/d1/get-started/>
 - D1 migrations: <https://developers.cloudflare.com/d1/reference/migrations/>
 - Cloudflare Workers limits: <https://developers.cloudflare.com/workers/platform/limits/>
 - OWASP Password Storage: <https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html>
