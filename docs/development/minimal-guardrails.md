@@ -35,7 +35,7 @@ GitHubの`--auto`予約や新しいCI完了Webhookは使わない。予約後の
 1. CI・本書・ruleset正本を含む導入PRをDraftで作成し、`verify`が成功することを確認する。DraftではApprove・Mergeしない。
 2. GitHub管理者は既存rulesetを読み取り、重複作成せず、正本の設定をdevelopへ適用する。`verify`の発行元がGitHub Actions（App ID `15368`）であることを実行結果から照合する。
 3. repositoryのsquash/rebase mergeを無効にし、merge commitを有効にする。適用ルール・bypassなし・チェック名・App IDをAPIから再取得する。
-4. 未承認の導入PRがGitHub上でMerge不可であることを確認する。保護設定を先に有効化するため、本PRのmerge前でもCI成功を導入条件とする（#14の当初の「#13マージ済み」条件をこの初回手順で置き換える）。
+4. `gh pr view <PR番号> --repo rytich/play-cms --json reviewDecision,mergeStateStatus,isDraft`で`reviewDecision: REVIEW_REQUIRED`を確認する。DraftもMergeを止めるため、`BLOCKED`だけを承認ルールの証拠にはしない。手順3で再取得した適用ルールと合わせて記録し、Ready移行後も未承認なら`REVIEW_REQUIRED`が維持されることを確認する。保護設定を先に有効化するため、本PRのmerge前でもCI成功を導入条件とする（#14の当初の「#13マージ済み」条件をこの初回手順で置き換える）。
 5. 別端末のレビュー実行環境で本手順が読み込まれることを確認し、Readyにしてknrytの独立レビューへ渡す。レビュー処理の完了、承認されたSHA、マージ後のdevelopを確認する。実行環境を確認できない場合は「実装済み・運用確認待ち」と記録する。
 
 設定ファイルをコミットしただけでは適用済みとしない。Issueにruleset ID、確認日、CI実行URL、PR、未確認事項を記録する。秘密情報や署名ヘッダーは保存しない。
