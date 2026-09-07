@@ -85,17 +85,18 @@ tests/
 
 **Files:**
 
-- Preserve: `src/application/ports/filma-auth.ts`
-- Preserve: `src/application/use-cases/verify-filma-credentials.ts`
 - Preserve: `src/adapters/filma/live-contract.ts`
 - Preserve: `tests/unit/filma-live-contract.test.ts`
+- Preserve: `tests/live/filma-token.live.test.ts`
+- Preserve: `vitest.live.config.ts`
+- Preserve: `docs/development/filma-live-api-testing.md`
 - Resolve: `docs/superpowers/plans/2026-09-03-foundation-implementation.md`
 
 - [ ] **Step 1: リモート状態と対象SHAをIssueへ記録する**
 
 ```bash
 gh pr view 7 --json url,state,isDraft,mergeable,mergeStateStatus,headRefOid,baseRefOid,reviews,statusCheckRollup
-git fetch origin develop 1a-m3/issue-6-filma-live-contract
+git fetch origin develop feature/issue-6-filma-live-contract
 ```
 
 Issue #6へbase SHA、head SHA、競合状態だけを記録し、秘密情報やAPI応答は書かない。
@@ -103,7 +104,7 @@ Issue #6へbase SHA、head SHA、競合状態だけを記録し、秘密情報�
 - [ ] **Step 2: mergeで`develop`を取り込む**
 
 ```bash
-git switch 1a-m3/issue-6-filma-live-contract
+git switch feature/issue-6-filma-live-contract
 git merge origin/develop
 ```
 
@@ -135,7 +136,7 @@ unset FILMA_LIVE_API_KEY
 ```bash
 git add src tests docs package.json pnpm-lock.yaml
 git commit -m "fix: sync Filma contract with develop"
-git push origin 1a-m3/issue-6-filma-live-contract
+git push origin feature/issue-6-filma-live-contract
 ```
 
 PR #7へ新head SHA、検証結果、残課題を追記する。別レビュー担当が新headをレビューし、knrytのApproveが同じSHAに付いたことを確認してからmergeする。
