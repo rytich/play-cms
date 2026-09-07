@@ -363,7 +363,8 @@ lockfileをcommitし、追加理由をPRの「依存パッケージ」に記録�
     "test:worker": "vitest run --config vitest.worker.config.ts",
     "test:filma:live": "node --env-file-if-exists=.dev.vars ./node_modules/vitest/vitest.mjs run --config vitest.live.config.ts",
     "test:p0:smoke": "node --env-file-if-exists=.dev.vars ./node_modules/vitest/vitest.mjs run --config vitest.live.config.ts tests/live/p0-smoke.live.test.ts",
-    "deploy:p0": "pnpm build && wrangler deploy --env production",
+    "build:production": "CLOUDFLARE_ENV=production vite build",
+    "deploy:p0": "pnpm build:production && pnpm check:cloudflare:production-config && wrangler deploy",
     "verify": "pnpm lint && pnpm typecheck && pnpm test && pnpm test:worker && pnpm build && pnpm format:check"
   }
 }
@@ -379,7 +380,7 @@ pnpm wrangler types
 pnpm wrangler d1 migrations apply play-cms-p0-dev --local
 ```
 
-`wrangler.jsonc`は`name: "play-cms-p0-dev"`、`compatibility_date: "2026-09-07"`、`main: "./src/worker.ts"`、`assets.directory: "./dist"`、`assets.not_found_handling: "single-page-application"`、`assets.run_worker_first: ["/api/*", "/v/*"]`を定義する。`d1_databases`にはbinding `DATABASE`、database name `play-cms-p0-dev`、作成commandが返した`database_id`、`migrations_dir: "migrations"`を設定する。
+`wrangler.jsonc`は`name: "play-cms-p0-dev"`、`compatibility_date: "2026-09-07"`、`main: "./src/worker.ts"`、`assets.binding: "ASSETS"`、`assets.not_found_handling: "single-page-application"`、`assets.run_worker_first: ["/api/*", "/v/*"]`を定義する。Vite pluginがbuild出力の`assets.directory`を生成するため、入力設定へdirectoryを固定しない。`d1_databases`にはbinding `DATABASE`、database name `play-cms-p0-dev`、作成commandが返した`database_id`、`migrations_dir: "migrations"`を設定する。
 
 `vite.config.ts`はReact pluginと`@cloudflare/vite-plugin`の`cloudflare()`を使い、rootを`src/ui`へ移す。開発・自動testはlocal D1だけを使い、`--remote` migrationはTask 6まで実行しない。
 
@@ -389,12 +390,18 @@ OWASPのPBKDF2-HMAC-SHA-256推奨値600,000 iterationsを実装候補とする�
 
 `spikes/password-hash-benchmark/worker.ts`は128 UTF-8 byteの固定test passwordを用い、1 requestにつきhashまたはverifyを一回だけ実行する。`BENCHMARK_TOKEN` Worker secretが一致する要求だけを受け、password、salt、hashをresponseやlogへ出さない。`scripts/run-password-hash-benchmark.mjs`は送信先を`BENCHMARK_BASE_URL`、認証値を`BENCHMARK_TOKEN`から読み、どちらかが未設定なら実行を拒否する。hash 20 request、verify 20 requestを直列に送り、statusとwall timeだけを記録し、token値をcommand line、log、Issue、PRへ出さない。
 
+benchmark Worker名は`play-cms-password-benchmark-issue-<Issue番号>-<8桁hex>`形式でIssueごとに一意にし、その実値を専用configとlocalの作業記録へ固定する。実行前に`wrangler whoami`でaccountを確認し、Cloudflare dashboardと`wrangler deployments list --name <確定名>`で同名Workerが存在しないことを確認する。存在する場合は上書きも削除もせず、別名へ変更する。
+
 ```bash
-pnpm wrangler secret put BENCHMARK_TOKEN --config spikes/password-hash-benchmark/wrangler.jsonc
+pnpm wrangler whoami
+pnpm wrangler deployments list --name <確定した一意のbenchmark Worker名>
 pnpm wrangler deploy --config spikes/password-hash-benchmark/wrangler.jsonc
+pnpm wrangler secret put BENCHMARK_TOKEN --config spikes/password-hash-benchmark/wrangler.jsonc
 node scripts/run-password-hash-benchmark.mjs
-pnpm wrangler delete --name play-cms-password-benchmark
+pnpm wrangler delete --name <作成確認済みの同じbenchmark Worker名>
 ```
+
+削除前にlocal作業記録のaccountとWorker名が作成時の値と一致することを再確認する。自分で作成したことを確認できないWorkerは削除しない。削除後に同名が存在しないことまで確認し、Issueには名前やaccount IDではなく削除確認済みという結果だけを残す。
 
 Cloudflare Metricsで40 requestのCPU timeを確認し、hash・verifyの両方でP95が8 ms以下、Error 1102が0件、HTTP失敗が0件の場合だけGOとする。20%のheadroomを満たさない場合やmetricsを確認できない場合もNO-GOとする。`docs/development/password-hash-benchmark.md`へ日付、runtime/package version、request数、P50/P95/max CPU、1102件数、GO/NO-GO、削除確認だけを記録する。
 
@@ -402,37 +409,43 @@ Cloudflare Metricsで40 requestのCPU timeを確認し、hash・verifyの両方�
 
 - [ ] **Step 3: 管理者設定のWorker testを書く**
 
-`vitest.worker.config.ts`はVitest 4向け`cloudflareTest({ wrangler: { configPath: './wrangler.jsonc' } })`を設定する。`tests/worker/admin-setup.test.ts`は`cloudflare:test`の`SELF`を使い、次を実APIとして検証する。
+`vitest.worker.config.ts`はVitest 4向け`cloudflareTest({ wrangler: { configPath: './wrangler.jsonc' } })`を設定する。`tests/worker/admin-setup.test.ts`は`cloudflare:workers`の`exports.default.fetch()`を使い、次を実APIとして検証する。Assetsを含む経路だけは`env.ASSETS.fetch()`を明示的に使う。
 
 ```ts
 it('creates exactly one admin and never returns secrets', async () => {
-  const first = await SELF.fetch('https://example.test/api/admin/setup', {
-    method: 'POST',
-    headers: {
-      ...jsonSameOriginHeaders,
-      'X-Play-Bootstrap-Token': 'test-bootstrap-token',
+  const first = await exports.default.fetch(
+    'https://example.test/api/admin/setup',
+    {
+      method: 'POST',
+      headers: {
+        ...jsonSameOriginHeaders,
+        'X-Play-Bootstrap-Token': 'test-bootstrap-token',
+      },
+      body: JSON.stringify({
+        email: 'admin@example.test',
+        password: 'correct horse battery staple',
+      }),
     },
-    body: JSON.stringify({
-      email: 'admin@example.test',
-      password: 'correct horse battery staple',
-    }),
-  })
+  )
   expect(first.status).toBe(201)
   expect(await first.json()).toEqual({ configured: true })
 
-  const second = await SELF.fetch('https://example.test/api/admin/setup', {
-    method: 'POST',
-    headers: jsonSameOriginHeaders,
-    body: JSON.stringify({
-      email: 'other@example.test',
-      password: 'another correct password',
-    }),
-  })
+  const second = await exports.default.fetch(
+    'https://example.test/api/admin/setup',
+    {
+      method: 'POST',
+      headers: jsonSameOriginHeaders,
+      body: JSON.stringify({
+        email: 'other@example.test',
+        password: 'another correct password',
+      }),
+    },
+  )
   expect(second.status).toBe(404)
 })
 ```
 
-同じfileにbootstrap tokenの未指定・不一致・使用済み・並行要求、login成功、Cookie属性、誤password、admin routeのrole拒否、16 KiB超過、余分なfield、Origin不一致、rate limit fail-closedを追加する。tokenの失敗理由と管理者作成済みは同じ404本文になることも検証する。
+同じfileにrequestのbootstrap token未指定・不一致・使用済み・並行要求、login成功、Cookie属性、誤password、admin routeのrole拒否、16 KiB超過、余分なfield、Origin不一致、rate limit fail-closedを追加する。tokenの失敗理由と管理者作成済みは同じ404本文になることも検証する。さらにDBが未使用のときにWorker secret自体が欠落するとsetupだけ503、使用済み後にsecretを除いても通常routeは動作しsetupは汎用404となることを検証する。
 
 - [ ] **Step 4: REDを確認する**
 
@@ -460,7 +473,7 @@ emailは正規化値をuniqueにし、sessionとaccess codeはhashだけを保�
 
 `web-crypto.ts`はPBKDF2-HMAC-SHA-256、ランダムsalt、600,000 iterationsを用いてpasswordを保存し、比較は固定時間で行う。初期設定では256 bit以上の`PLAY_BOOTSTRAP_TOKEN`を固定時間で比較し、使用済み状態も確認する。Filma API keyは`PLAY_ENCRYPTION_KEY`からAES-GCMで暗号化し、nonceを暗号文と別fieldに保存する。session tokenは128 bit以上の乱数を生成し、D1にはSHA-256 hashだけを保存する。rate-limit bucketは`PLAY_RATE_LIMIT_KEY`によるHMAC-SHA-256から作る。
 
-`PLAY_BOOTSTRAP_TOKEN`、`PLAY_SESSION_SECRET`、`PLAY_ENCRYPTION_KEY`、`PLAY_RATE_LIMIT_KEY`の未設定、復号失敗、乱数生成失敗はstartupまたはrequestを503で安全側に閉じる。
+`PLAY_BOOTSTRAP_TOKEN`は`bootstrap_consumed_at`が未設定の間だけ必須とし、欠落時のsetupを503で閉じる。使用済みになった後はtokenを削除しても通常routeを動作させ、setupはtokenの有無にかかわらず汎用404を返す。`PLAY_ENCRYPTION_KEY`と`PLAY_RATE_LIMIT_KEY`の未設定、復号失敗、乱数生成失敗は影響するrequestを503で安全側に閉じる。用途のないsession signing secretは追加せず、sessionは128 bit以上のrandom tokenとD1内のSHA-256 hashで検証する。
 
 - [ ] **Step 7: use case、route、最小UIを実装する**
 
@@ -490,7 +503,7 @@ git diff --check origin/develop...HEAD
 - [ ] **Step 9: commit、push、レビューする**
 
 ```bash
-git add package.json pnpm-lock.yaml wrangler.jsonc worker-configuration.d.ts migrations src tests vitest.worker.config.ts vite.config.ts
+git add package.json pnpm-lock.yaml wrangler.jsonc worker-configuration.d.ts migrations src tests spikes/password-hash-benchmark scripts/run-password-hash-benchmark.mjs docs/development/password-hash-benchmark.md vitest.worker.config.ts vite.config.ts tsconfig.json
 git commit -m "feat: add Cloudflare admin setup slice"
 git push -u origin HEAD
 ```
@@ -521,6 +534,11 @@ Issue/PRへD1 migration、secret名、公開route、negative test、head SHAを�
 - Create: `tests/unit/video-availability.test.ts`
 - Create: `tests/unit/access-code.test.ts`
 - Create: `tests/worker/anonymous-viewing.test.ts`
+- Create: `tests/integration/assets-routing.test.ts`
+- Modify: `package.json`
+- Modify: `vitest.config.ts`
+
+Task 4の最初に通常`test`対象を`tests/unit`へ限定し、`"test:integration": "pnpm build && vitest run tests/integration"`を追加する。`verify`は`test:worker`の後に`test:integration`も実行するよう更新する。これによりAssets integration testは必ずbuild済み出力を使い、`tests/worker`はWorkers runtime用configだけで実行する。
 
 - [ ] **Step 1: availabilityとcode生成の失敗テストを書く**
 
@@ -590,6 +608,8 @@ GET  /v/:publicId
 
 `/v/:publicId`は`assets.run_worker_first`によりWorkerで先に処理する。動画が`published`かつ期間内の場合だけ`env.ASSETS.fetch()`で汎用SPA shellを返し、`draft`、公開前、期限切れ、不明IDは本文に動画情報を含まないHTTP 404を返す。これによりcode入力前でも期限外動画の存在をSPA fallbackから推測させない。
 
+`tests/worker/anonymous-viewing.test.ts`は`exports.default.fetch()`でAPIとWorker分岐を高速に検証する。`tests/integration/assets-routing.test.ts`はWranglerの現行`createTestHarness()`をbuild済みVite出力へ接続し、root設定の`ASSETS` bindingを含む実HTTP経路を検証する。公開中の`/v/:publicId`だけが実際のSPA shellを返し、公開前・終了時刻ちょうど・期限切れ・不明IDではAssetsへ到達せず404になることを確認する。
+
 - [ ] **Step 6: 最小管理UIと視聴UIを実装する**
 
 `/admin/videos`は登録、編集、code発行、未使用code取消だけを提供する。生成codeは一度だけ表示し、再表示機能を作らない。
@@ -605,6 +625,7 @@ GET  /v/:publicId
 ```bash
 pnpm vitest run tests/unit/video-availability.test.ts tests/unit/access-code.test.ts
 pnpm vitest run --config vitest.worker.config.ts tests/worker/anonymous-viewing.test.ts
+pnpm test:integration
 pnpm verify
 pnpm build
 git diff --check origin/develop...HEAD
@@ -613,7 +634,7 @@ git diff --check origin/develop...HEAD
 - [ ] **Step 8: commit、push、レビューする**
 
 ```bash
-git add src tests package.json pnpm-lock.yaml
+git add src tests package.json pnpm-lock.yaml vitest.config.ts
 git commit -m "feat: add one-time anonymous viewing"
 git push -u origin HEAD
 ```
@@ -730,6 +751,8 @@ PRには二つの権利取得経路、期限切れ非表示、role分離のtest�
 - Create: `tests/live/p0-smoke.live.test.ts`
 - Create: `scripts/check-secrets.mjs`
 - Create: `tests/unit/check-secrets.test.ts`
+- Create: `scripts/check-cloudflare-production-config.mjs`
+- Create: `tests/unit/check-cloudflare-production-config.test.ts`
 - Create: `docs/operations/cloudflare-p0-deploy.md`
 - Create: `docs/product/p0-test-script.md`
 - Modify: `README.md`
@@ -767,24 +790,28 @@ pnpm vitest run --config vitest.worker.config.ts tests/worker/security-boundarie
 
 `docs/operations/cloudflare-p0-deploy.md`は実値を含めず、次の順序を固定する。最初にproduction D1を作成し、出力された`database_name`と`database_id`を`wrangler.jsonc`の`env.production.d1_databases`へ設定する。bindingは`DATABASE`、`migrations_dir`は`migrations`に固定する。開発用`play-cms-p0-dev`とproduction `play-cms-p0`のIDを取り違えていないことをaccount名とdatabase名で確認する。
 
-`wrangler.jsonc`の`env.production`にはWorker名`play-cms-p0`、rootと同じ`compatibility_date`、`assets.directory`、`assets.binding`、`assets.run_worker_first: ["/api/*", "/v/*"]`、上記D1 bindingを明示する。preview/localは開発用D1、production deployとremote migrationはproduction D1だけを参照し、設定生成後に`pnpm wrangler types`でbinding型を更新する。
+`wrangler.jsonc`の`env.production`にはWorker名`play-cms-p0`、rootと同じ`compatibility_date`、`assets.binding: "ASSETS"`、`assets.not_found_handling: "single-page-application"`、`assets.run_worker_first: ["/api/*", "/v/*"]`、上記D1 bindingを明示する。Vite pluginがbuild出力へ`assets.directory`を生成するため、production入力設定にもdirectoryを固定しない。preview/localは開発用D1、production buildとremote migrationはproduction D1だけを参照し、設定生成後に`pnpm wrangler types`でbinding型を更新する。
+
+Cloudflare Vite pluginではenvironmentをbuild時に選択する。`scripts/check-cloudflare-production-config.mjs`はbuild後の`.wrangler/deploy/config.json`が指す生成済みconfigを読み、Worker名`play-cms-p0`、D1 binding `DATABASE`、database name `play-cms-p0`、Assets binding `ASSETS`、`/api/*`と`/v/*`のWorker-firstを確認する。値が欠落・不一致ならremote migrationとdeployを止める。`tests/unit/check-cloudflare-production-config.test.ts`でdevelopment混入、不正なredirect先、binding欠落を固定する。
+
+このStepで`package.json`へ`"check:cloudflare:production-config": "node scripts/check-cloudflare-production-config.mjs"`を追加する。
 
 ```bash
 pnpm wrangler whoami
 pnpm wrangler d1 create play-cms-p0
 pnpm wrangler types
 pnpm verify
-pnpm build
-pnpm wrangler deploy --dry-run --env production
+CLOUDFLARE_ENV=production pnpm build
+pnpm check:cloudflare:production-config
+pnpm wrangler deploy --dry-run
 pnpm wrangler d1 migrations apply play-cms-p0 --remote --env production
 pnpm wrangler secret put PLAY_BOOTSTRAP_TOKEN --env production
-pnpm wrangler secret put PLAY_SESSION_SECRET --env production
 pnpm wrangler secret put PLAY_ENCRYPTION_KEY --env production
 pnpm wrangler secret put PLAY_RATE_LIMIT_KEY --env production
 pnpm deploy:p0
 ```
 
-すべての`secret put`はproduction environmentを明示する。初期登録後は`PLAY_BOOTSTRAP_TOKEN`を削除またはrotationし、DBの`bootstrap_consumed_at`でも再利用を拒否する。文書にはlocal/production migrationの違い、D1 backup/exportの確認、前Worker versionへのrollback、招待試験終了後のroute停止、残るsecretのrotationを含める。Cloudflare dashboardのaccount ID、database ID、route、secret値は例示しない。
+`wrangler deploy --env production`は使わず、必ず`CLOUDFLARE_ENV=production`でbuildして生成configを検査してから、引数なしの`wrangler deploy`を実行する。D1 resource操作と`secret put`だけは入力`wrangler.jsonc`を対象とするためproduction environmentを明示する。初期登録後は`PLAY_BOOTSTRAP_TOKEN`を削除し、DBの`bootstrap_consumed_at`でも再利用を拒否する。文書にはlocal/production migrationの違い、D1 backup/exportの確認、前Worker versionへのrollback、招待試験終了後のroute停止、残るsecretのrotationを含める。Cloudflare dashboardのaccount ID、database ID、route、secret値は例示しない。
 
 - [ ] **Step 5: non-destructive P0 smoke testを作成する**
 
@@ -805,11 +832,12 @@ playback grantがHTTPSで取得できる
 
 ```bash
 pnpm verify
-pnpm build
+CLOUDFLARE_ENV=production pnpm build
+pnpm check:cloudflare:production-config
 pnpm vitest run --config vitest.worker.config.ts
 pnpm check:secrets
 git diff --check origin/develop...HEAD
-rg -n "FILMA_LIVE_|PLAY_BOOTSTRAP_TOKEN|PLAY_SESSION_SECRET|PLAY_ENCRYPTION_KEY|PLAY_RATE_LIMIT_KEY" .
+rg -n "FILMA_LIVE_|PLAY_BOOTSTRAP_TOKEN|PLAY_ENCRYPTION_KEY|PLAY_RATE_LIMIT_KEY" .
 ```
 
 `scripts/check-secrets.mjs`はtracked fileだけを対象に、private key header、GitHub/AWS既知token形式、JWT形式、headerへ埋め込まれたBearer/API key、`*_SECRET=`と`FILMA_LIVE_API_KEY=`の非placeholder値を検出する。`replace-with-`で始まる文書用値と変数名単体だけをallowlistとし、検出文字列は`[REDACTED]`へ置換してpath・lineだけを出力する。`tests/unit/check-secrets.test.ts`で検出例と許可例を固定する。
@@ -823,7 +851,7 @@ rg -n "FILMA_LIVE_|PLAY_BOOTSTRAP_TOKEN|PLAY_SESSION_SECRET|PLAY_ENCRYPTION_KEY|
 - [ ] **Step 8: commit、push、レビューする**
 
 ```bash
-git add tests docs README.md package.json wrangler.jsonc
+git add tests docs README.md package.json wrangler.jsonc worker-configuration.d.ts scripts/check-secrets.mjs scripts/check-cloudflare-production-config.mjs
 git commit -m "test: complete Cloudflare P0 release gates"
 git push -u origin HEAD
 ```
@@ -851,9 +879,12 @@ P0完了は次をすべて満たす場合だけ宣言する。
 ## Current Documentation Sources
 
 - Cloudflare Vite plugin: <https://developers.cloudflare.com/workers/vite-plugin/>
+- Cloudflare Vite environments: <https://developers.cloudflare.com/workers/vite-plugin/reference/cloudflare-environments/>
+- Cloudflare Vite static assets: <https://developers.cloudflare.com/workers/vite-plugin/reference/static-assets/>
 - Cloudflare SPA routing: <https://developers.cloudflare.com/workers/static-assets/routing/single-page-application/>
 - Cloudflare Vitest integration: <https://developers.cloudflare.com/workers/testing/vitest-integration/>
 - Cloudflare Vitest plugin migration: <https://developers.cloudflare.com/workers/testing/vitest-integration/migration-guides/migrate-to-vitest-plugin/>
+- Cloudflare integration test harness: <https://developers.cloudflare.com/workers/testing/test-harness/>
 - D1 create and configuration: <https://developers.cloudflare.com/d1/get-started/>
 - D1 migrations: <https://developers.cloudflare.com/d1/reference/migrations/>
 - Cloudflare Workers limits: <https://developers.cloudflare.com/workers/platform/limits/>

@@ -88,7 +88,7 @@ P0ではメールアドレスの所有確認、メール送信、パスワード
 6. サーバーが固定Filma endpointでキーを検証し、暗号化済みキーと必要最小限の接続情報を保存する。
 7. bootstrap tokenとAPIキーは保存後に画面へ再表示しない。
 
-bootstrap tokenが未指定・不一致・使用済みの場合と、管理者が存在する場合は、理由を区別しない404として初期登録APIを閉じる。使用後はWorker secretを削除またはrotationするが、DBの使用済み状態により古い値の再利用も拒否する。
+requestのbootstrap tokenが未指定・不一致・使用済みの場合と、管理者が存在する場合は、理由を区別しない404として初期登録APIを閉じる。DBがbootstrap未使用なのにWorker secret自体が設定されていない場合だけ、構成不備として503にする。使用後はWorker secretを削除し、通常routeはそのsecretなしで動作させる。初期登録APIはDBの使用済み状態により、secretの有無や古い値にかかわらず汎用404を返す。
 
 ### 動画登録とコード発行
 
@@ -192,7 +192,7 @@ P0のD1テーブルを次に限定する。
 - 管理者: Filma設定、動画一覧・作成・更新、コード生成・失効
 - 視聴者: コード消費、再生情報取得、視聴権一覧
 
-状態変更はJSONのみを受け付け、16 KiBを上限とする。入力は境界で検証し、余分なフィールドを拒否する。初期管理者登録は`PLAY_BOOTSTRAP_TOKEN`、管理APIはadmin role、視聴権一覧はviewer role、再生情報は有効な匿名視聴セッションまたはviewer entitlementを必須とする。
+状態変更はJSONのみを受け付け、16 KiBを上限とする。入力は境界で検証し、余分なフィールドを拒否する。初期管理者登録はbootstrap未使用の間だけ`PLAY_BOOTSTRAP_TOKEN`、管理APIはadmin role、視聴権一覧はviewer role、再生情報は有効な匿名視聴セッションまたはviewer entitlementを必須とする。
 
 ## セキュリティと失敗時の挙動
 
