@@ -1,0 +1,22 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "play-cms-local-prototype",
+  "main": "src/worker.ts",
+  "compatibility_date": "2026-09-07",
+  "workers_dev": false,
+  "preview_urls": false,
+  "vars": { "PLAY_LOCAL_ONLY": "true" },
+  "assets": {
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*", "/v/*"],
+  },
+  "d1_databases": [
+    {
+      "binding": "DATABASE",
+      "database_name": "play-cms-local",
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations",
+    },
+  ],
+}

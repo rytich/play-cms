@@ -12,6 +12,8 @@
 
 **Tracking:** [GitHub Issue #10](https://github.com/rytich/play-cms/issues/10)
 
+**2026-09-07 承認追補:** [Issue #18の管理機能先行実装](../../development/admin-first-prototype.md)に限り、Task 2の再生GO・merge前でもlocalhost用の管理機能を実装できる。本計画のTasks 3〜6全体を開始・完了したとは扱わず、再生・試験公開のGO条件は維持する。停止条件と衝突する場合、先行実装の範囲にはこの追補を優先する。
+
 **Related:** [基盤設計](../specs/2026-09-03-foundation-design.md) / [`SECURITY.md`](../../../SECURITY.md)
 
 ## Global Constraints
