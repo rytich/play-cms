@@ -5,12 +5,15 @@
 - 関連判断: [ADR 0001](../../decisions/0001-use-lightweight-portable-architecture.md)
 - 基盤実装: [GitHub Issue #1](https://github.com/rytich/play-cms/issues/1)
 - セキュリティ方針: [GitHub Issue #8](https://github.com/rytich/play-cms/issues/8)
+- P0プロトタイプ: [設計](2026-09-07-p0-prototype-design.md) / [GitHub Issue #10](https://github.com/rytich/play-cms/issues/10)
 
 ## 目的
 
 Filmaと連携する動画CMSの開発基盤を構築する。Cloudflareを推奨環境とし、公開リポジトリのボタンから導入できる一方、Node.jsを実行できる国内サーバーでもDockerを使って運用できるようにする。
 
 最初の実装単位では、デプロイ可能なアプリケーション基盤、管理者認証、Filma APIキーの暗号化保存と接続確認までを扱う。動画管理、視聴コード、エンドユーザー登録、視聴権一覧、アクセス解析は後続の機能単位で設計・実装する。
+
+利用価値を早期検証するP0では、[P0プロトタイプ設計](2026-09-07-p0-prototype-design.md)を実装順と対象範囲の正本とする。完成版の技術構成とセキュリティ原則は本設計を維持する。
 
 ## 設計原則
 
