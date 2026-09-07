@@ -124,7 +124,7 @@ git diff --check origin/develop...HEAD
 ```bash
 read -r -s FILMA_LIVE_API_KEY
 export FILMA_LIVE_API_KEY
-pnpm test:live
+pnpm test:filma:live
 unset FILMA_LIVE_API_KEY
 ```
 
@@ -172,7 +172,7 @@ PR #7へ新head SHA、検証結果、残課題を追記する。別レビュー�
 pnpm vitest run tests/unit/filma-live-contract.test.ts
 read -r -s FILMA_LIVE_API_KEY
 export FILMA_LIVE_API_KEY
-pnpm test:live
+pnpm test:filma:live
 unset FILMA_LIVE_API_KEY
 ```
 
@@ -274,7 +274,7 @@ pnpm vitest run tests/unit/filma-playback-contract.test.ts
 read -r -s FILMA_LIVE_API_KEY
 read -r -s FILMA_LIVE_VIDEO_ID
 export FILMA_LIVE_API_KEY FILMA_LIVE_VIDEO_ID
-pnpm test:live
+pnpm test:filma:live
 unset FILMA_LIVE_API_KEY FILMA_LIVE_VIDEO_ID
 pnpm verify
 git diff --check origin/develop...HEAD
