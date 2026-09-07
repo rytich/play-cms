@@ -21,7 +21,7 @@
 ## 実行結果と制限
 
 - 認証契約単体テスト: `pnpm exec vitest run tests/unit/filma-live-contract.test.ts`、15件成功。
-- 実API認証テスト: 設定済みのGit管理外設定を読み込んで、`vitest.live.config.ts`を指定し1回だけ実行。2026-09-07 18:01 JST、約5秒で `FILMA_UNAVAILABLE`、1件失敗。HTTP statusは取得できていない。この結果だけでキー無効・Filma障害・タイムアウト原因を断定しない。
+- 実API認証テスト: 設定済みのGit管理外設定を読み込んで、`vitest.live.config.ts`を指定し1回だけ実行。2026-09-07 18:01 JST、約5秒で `FILMA_UNAVAILABLE`、1件失敗。記録されたログではHTTP statusは確認できない。この結果だけでキー無効・Filma障害・タイムアウト原因を断定しない。
 - 既存の5秒上限、64 KiB上限、redirect拒否、自動再試行なしを変更していない。動画取得・ブラウザー再生・期限終了後のアクセス遮断は未実行。
 - 保存禁止: APIキー、JWT、実組織ID・動画ID、再生URL、認証ヘッダー、レスポンス本文。公開文書にある能力とCMS要件の差だけを記録し、未確認の脆弱性を主張しない。
 
