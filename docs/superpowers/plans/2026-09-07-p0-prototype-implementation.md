@@ -535,10 +535,11 @@ Issue/PRへD1 migration、secret名、公開route、negative test、head SHAを�
 - Create: `tests/unit/access-code.test.ts`
 - Create: `tests/worker/anonymous-viewing.test.ts`
 - Create: `tests/integration/assets-routing.test.ts`
+- Create: `vitest.integration.config.ts`
 - Modify: `package.json`
 - Modify: `vitest.config.ts`
 
-Task 4の最初に通常`test`対象を`tests/unit`へ限定し、`"test:integration": "pnpm build && vitest run tests/integration"`を追加する。`verify`は`test:worker`の後に`test:integration`も実行するよう更新する。これによりAssets integration testは必ずbuild済み出力を使い、`tests/worker`はWorkers runtime用configだけで実行する。
+Task 4の最初に通常の`vitest.config.ts`の対象を`tests/unit/**/*.test.{ts,tsx}`へ限定する。別の`vitest.integration.config.ts`はNode環境、`tests/integration/**/*.test.ts`、`restoreMocks: true`を明示し、通常configを継承しない。`package.json`へ`"test:integration": "pnpm build && vitest run --config vitest.integration.config.ts"`を追加し、`verify`は`test:worker`の後に`test:integration`も実行するよう更新する。これによりAssets integration testは通常configのincludeに遮られず必ずbuild済み出力を使い、`tests/worker`はWorkers runtime用configだけで実行する。
 
 - [ ] **Step 1: availabilityとcode生成の失敗テストを書く**
 
@@ -634,7 +635,7 @@ git diff --check origin/develop...HEAD
 - [ ] **Step 8: commit、push、レビューする**
 
 ```bash
-git add src tests package.json pnpm-lock.yaml vitest.config.ts
+git add src tests package.json pnpm-lock.yaml vitest.config.ts vitest.integration.config.ts
 git commit -m "feat: add one-time anonymous viewing"
 git push -u origin HEAD
 ```
