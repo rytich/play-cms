@@ -5,7 +5,7 @@
 - 関連判断: [ADR 0001](../../decisions/0001-use-lightweight-portable-architecture.md)
 - 基盤実装: [GitHub Issue #1](https://github.com/rytich/play-cms/issues/1)
 - セキュリティ方針: [GitHub Issue #8](https://github.com/rytich/play-cms/issues/8)
-- P0プロトタイプ: [設計](2026-09-07-p0-prototype-design.md) / [GitHub Issue #10](https://github.com/rytich/play-cms/issues/10)
+- P0プロトタイプ: [設計](2026-09-07-p0-prototype-design.md) / [実装計画](../plans/2026-09-07-p0-prototype-implementation.md) / [GitHub Issue #10](https://github.com/rytich/play-cms/issues/10)
 
 ## 目的
 

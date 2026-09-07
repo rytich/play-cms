@@ -1,9 +1,10 @@
 # play-cms P0最小縦切りプロトタイプ設計
 
-- 状態: レビュー待ち
+- 状態: 承認済み
 - 作成日: 2026-09-07
 - Tracking: [GitHub Issue #10](https://github.com/rytich/play-cms/issues/10)
 - 前提: [基盤設計](2026-09-03-foundation-design.md)
+- 実装計画: [P0 Prototype Implementation Plan](../plans/2026-09-07-p0-prototype-implementation.md)
 - セキュリティ正本: [`SECURITY.md`](../../../SECURITY.md)
 
 ## 目的
