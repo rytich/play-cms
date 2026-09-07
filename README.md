@@ -24,6 +24,7 @@ pnpm verify
 
 - [基盤設計](docs/superpowers/specs/2026-09-03-foundation-design.md)
 - [実装計画](docs/superpowers/plans/2026-09-03-foundation-implementation.md)
+- [Filma実API契約テスト](docs/development/filma-live-api-testing.md)
 - [技術判断](docs/decisions/0001-use-lightweight-portable-architecture.md)
 - [コントリビューションガイド](CONTRIBUTING.md)
 - [セキュリティポリシー](SECURITY.md)
@@ -31,3 +32,4 @@ pnpm verify
 ## 開発状況
 
 - [Task 1: 開発基盤とリポジトリ運用](https://github.com/rytich/play-cms/issues/1)
+- [Issue #6: Filma実API契約テスト](https://github.com/rytich/play-cms/issues/6)

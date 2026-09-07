@@ -13,6 +13,7 @@
     "format:check": "prettier --check .",
     "lint": "eslint .",
     "test": "vitest run",
+    "test:filma:live": "node --env-file-if-exists=.dev.vars ./node_modules/vitest/vitest.mjs run --config vitest.live.config.ts",
     "typecheck": "tsc --noEmit",
     "verify": "pnpm lint && pnpm typecheck && pnpm test && pnpm build:ui && pnpm format:check"
   },
