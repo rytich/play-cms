@@ -23,7 +23,11 @@ APIキーの保存・接続設定、実Filma通信、視聴者認証・視聴権
 
 初期登録は256bit以上のランダムなローカルbootstrap tokenと管理者未作成・未使用状態を要求し、DB制約とtransactionで一件に限定する。パスワードはsalt付きハッシュ、sessionと閲覧用キーはSHA-256ハッシュだけ保存する。sessionは8時間、HttpOnly/Secure/SameSite=Lax cookieを使う。
 
+管理者パスワードはUnicode code pointで12文字以上、UTF-8で128バイト以下とし、UIとAPIで同じ検証を使う。PBKDF2-HMAC-SHA-256の600,000 iterationsは維持する。
+
 状態変更は同一Origin、application/json、16KiB以下、余分なfield拒否。管理APIは毎回admin roleを検証する。共有D1 rate limitは初期登録5回/15分、login10回/client・5回/account/15分。localhostのみのclient bucketを使い、本番でのIP判定の代用にしない。管理者の書込は60回/分に制限するが、発行総数は制限しない。DB・暗号・構成エラーは秘密を含まない503とする。
+
+閲覧用キーの発行結果はrequest開始時の動画IDへ結び付け、完了前に別動画へ移動した場合はその画面へ表示しない。取消は未使用のキーだけを更新し、二度目の取消は対象なしとして扱う。管理HTMLはCSP `frame-ancestors 'none'`と`X-Frame-Options: DENY`をdev server、Worker、static assetの各経路で返す。
 
 ## 実装チェックリスト
 
@@ -41,3 +45,9 @@ Issue #18の一つの縦切りとして実装する。元計画Tasks 3/4全体�
 gitignoredの`.dev.vars`へローカル専用のbootstrap tokenとrate-limit keyを設定し、`pnpm db:migrate:local`、`pnpm dev`の順に実行する。開発サーバーのhostはIPv4 loopbackの`127.0.0.1`へ固定し、`0.0.0.0`やLANへ公開しない。起動後はViteが表示したLocal URL（通常は`http://127.0.0.1:5173/`）を開く。
 
 [Issue #19](https://github.com/rytich/play-cms/issues/19)では、`server.host: "localhost"`が環境によりIPv6 loopbackだけで待受し、IPv4を使うアプリ内ブラウザから接続できないことを確認した。`127.0.0.1`の明示後、待受がIPv4 loopbackだけになり、`http://localhost:5173/`と`http://127.0.0.1:5173/`の両方でHTTP 200を確認した。
+
+## 安全な検証
+
+通常のWorkerテストは`tests/worker/fixtures/wrangler.test.jsonc`と合成bindingだけを使う。`pnpm verify`の検証buildも同じ設定を使い、rootの`.dev.vars`と`.wrangler/state`を読み込まない。実際の秘密分離を確認するときは、OSの一時ディレクトリへリポジトリを複製し、そのfixtureのrootに合成sentinelだけを置いてWorkerテストを実行する。実worktreeの`.dev.vars`へsentinelを追記しない。
+
+frame拒否headerの実HTTP確認は、データ入りの5173番を使わず、一時fixtureを別のIPv4 loopback portでdev起動・build・previewする。`/`、`/admin/login`、`/index.html`、未知のSPA fallbackについて、`Content-Security-Policy: frame-ancestors 'none'`と`X-Frame-Options: DENY`を確認する。

@@ -44,7 +44,7 @@ export function normalizeEmail(value: unknown): string | null {
 export function validPassword(value: unknown): value is string {
   if (typeof value !== 'string') return false
   const bytes = new TextEncoder().encode(value).byteLength
-  return bytes >= 12 && bytes <= 128
+  return Array.from(value).length >= 12 && bytes <= 128
 }
 
 function canonicalIso(value: unknown): string | null {

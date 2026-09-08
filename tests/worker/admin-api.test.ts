@@ -91,6 +91,32 @@ function expectSecurityHeaders(response: Response) {
 describe('admin API', () => {
   beforeEach(resetDatabase)
 
+  it('does not expose a sentinel from a parent .dev.vars fixture', () => {
+    expect(
+      (env as unknown as Record<string, unknown>).ROOT_DEV_VARS_SENTINEL,
+    ).toBeUndefined()
+  })
+
+  it('serves admin HTML with frame isolation headers', async () => {
+    const response = await requestWithBindings('/admin/login', undefined, {
+      ASSETS: {
+        fetch: () =>
+          Promise.resolve(
+            new Response('<!doctype html><title>admin</title>', {
+              headers: { 'Content-Type': 'text/html; charset=utf-8' },
+            }),
+          ),
+      },
+    })
+
+    expect(response.status).toBe(200)
+    expect(response.headers.get('Content-Type')).toContain('text/html')
+    expect(response.headers.get('Content-Security-Policy')).toBe(
+      "frame-ancestors 'none'",
+    )
+    expect(response.headers.get('X-Frame-Options')).toBe('DENY')
+  })
+
   it('creates the only administrator without returning or storing secrets', async () => {
     const response = await setupAdmin({ email: ' Admin@Example.test ' })
 
@@ -207,6 +233,17 @@ describe('admin API', () => {
       expect(response.status).toBe(400)
       expect(await response.json()).toEqual({ error: 'invalid_request' })
     }
+  })
+
+  it('requires 12 Unicode code points within the 128-byte password limit', async () => {
+    for (const password of ['🔐🔐🔐', 'あいうえ']) {
+      const response = await setupAdmin({ password })
+      expect(response.status).toBe(400)
+      expect(await response.json()).toEqual({ error: 'invalid_request' })
+    }
+
+    const valid = await setupAdmin({ password: 'あいうえおかきくけこさし' })
+    expect(valid.status).toBe(201)
   })
 
   it('logs in with secure cookie flags and stores only the session hash', async () => {
@@ -496,6 +533,17 @@ describe('admin API', () => {
     )
     expect(revoked.status).toBe(200)
     expect(await revoked.json()).toEqual({ revoked: true })
+
+    const repeated = await api(
+      `/api/admin/videos/${firstVideo.video.id}/codes/${issuedBody.id}/revoke`,
+      {
+        method: 'POST',
+        headers: { ...jsonHeaders, Cookie: cookie },
+        body: '{}',
+      },
+    )
+    expect(repeated.status).toBe(404)
+    expect(await repeated.json()).toEqual({ error: 'not_found' })
 
     const list = await api(`/api/admin/videos/${firstVideo.video.id}/codes`, {
       headers: { Cookie: cookie },

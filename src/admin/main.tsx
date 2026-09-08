@@ -1,11 +1,13 @@
-import { StrictMode, useCallback, useEffect, useState } from 'react'
+import { StrictMode, useCallback, useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { createRoot } from 'react-dom/client'
 
 import {
   AdminRequestError,
+  acceptIssuedCodeForSelection,
   adminRequest,
   localDateTime,
+  passwordValidationError,
   toIsoDateTime,
 } from './client'
 import './styles.css'
@@ -52,6 +54,12 @@ function LoginForm({ onAuthenticated }: { onAuthenticated: () => void }) {
 
   async function submit(event: FormEvent) {
     event.preventDefault()
+    const validationError = passwordValidationError(password)
+    if (validationError) {
+      setError(validationError)
+      setPassword('')
+      return
+    }
     setBusy(true)
     setError('')
     try {
@@ -119,6 +127,12 @@ function SetupForm({ onComplete }: { onComplete: () => void }) {
 
   async function submit(event: FormEvent) {
     event.preventDefault()
+    const validationError = passwordValidationError(password)
+    if (validationError) {
+      setError(validationError)
+      setPassword('')
+      return
+    }
     setBusy(true)
     setError('')
     try {
@@ -206,6 +220,7 @@ function AdminVideos({ onUnauthorized }: { onUnauthorized: () => void }) {
   const [issuedCode, setIssuedCode] = useState<string | null>(null)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  const selectedVideoId = useRef<string | null>(null)
 
   const clearProtectedState = useCallback(() => {
     setVideos([])
@@ -213,6 +228,7 @@ function AdminVideos({ onUnauthorized }: { onUnauthorized: () => void }) {
     setCodes([])
     setIssuedCode(null)
     setForm(emptyVideoForm)
+    selectedVideoId.current = null
   }, [])
 
   const handleError = useCallback(
@@ -251,6 +267,7 @@ function AdminVideos({ onUnauthorized }: { onUnauthorized: () => void }) {
   }, [loadVideos])
 
   async function selectVideo(video: Video) {
+    selectedVideoId.current = video.id
     setIssuedCode(null)
     setSelected(video)
     setForm({
@@ -266,13 +283,14 @@ function AdminVideos({ onUnauthorized }: { onUnauthorized: () => void }) {
       const result = await adminRequest<{ codes: CodeMetadata[] }>(
         `/api/admin/videos/${video.id}/codes`,
       )
-      setCodes(result.codes)
+      if (selectedVideoId.current === video.id) setCodes(result.codes)
     } catch (caught) {
       handleError(caught)
     }
   }
 
   function newVideo() {
+    selectedVideoId.current = null
     setIssuedCode(null)
     setSelected(null)
     setCodes([])
@@ -296,6 +314,7 @@ function AdminVideos({ onUnauthorized }: { onUnauthorized: () => void }) {
         selected ? 'PUT' : 'POST',
         payload,
       )
+      selectedVideoId.current = result.video.id
       setSelected(result.video)
       setForm({
         filmaFileId: result.video.filmaFileId,
@@ -314,6 +333,7 @@ function AdminVideos({ onUnauthorized }: { onUnauthorized: () => void }) {
 
   async function issueCode() {
     if (!selected) return
+    const requestedVideoId = selected.id
     setIssuedCode(null)
     setBusy(true)
     setError('')
@@ -322,17 +342,15 @@ function AdminVideos({ onUnauthorized }: { onUnauthorized: () => void }) {
         id: string
         code: string
         createdAt: string
-      }>(`/api/admin/videos/${selected.id}/codes`, 'POST', {})
-      setIssuedCode(result.code)
-      setCodes((current) => [
-        {
-          id: result.id,
-          createdAt: result.createdAt,
-          revokedAt: null,
-          status: 'unused',
-        },
-        ...current,
-      ])
+      }>(`/api/admin/videos/${requestedVideoId}/codes`, 'POST', {})
+      const accepted = acceptIssuedCodeForSelection(
+        selectedVideoId.current,
+        requestedVideoId,
+        result,
+      )
+      if (!accepted) return
+      setIssuedCode(accepted.issuedCode)
+      setCodes((current) => [accepted.metadata, ...current])
     } catch (caught) {
       handleError(caught)
     } finally {
@@ -342,19 +360,20 @@ function AdminVideos({ onUnauthorized }: { onUnauthorized: () => void }) {
 
   async function revokeCode(codeId: string) {
     if (!selected) return
+    const requestedVideoId = selected.id
     setIssuedCode(null)
     setBusy(true)
     setError('')
     try {
       await adminRequest(
-        `/api/admin/videos/${selected.id}/codes/${codeId}/revoke`,
+        `/api/admin/videos/${requestedVideoId}/codes/${codeId}/revoke`,
         'POST',
         {},
       )
       const result = await adminRequest<{ codes: CodeMetadata[] }>(
-        `/api/admin/videos/${selected.id}/codes`,
+        `/api/admin/videos/${requestedVideoId}/codes`,
       )
-      setCodes(result.codes)
+      if (selectedVideoId.current === requestedVideoId) setCodes(result.codes)
     } catch (caught) {
       handleError(caught)
     } finally {

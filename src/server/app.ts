@@ -53,6 +53,14 @@ async function secureResponse(c: AppContext, next: () => Promise<void>) {
 app.use('/api/*', secureResponse)
 app.use('/v/*', secureResponse)
 
+async function serveAdmin(c: AppContext) {
+  return applySecurityHeaders(await c.env.ASSETS.fetch(c.req.raw))
+}
+
+app.get('/', serveAdmin)
+app.get('/admin', serveAdmin)
+app.get('/admin/*', serveAdmin)
+
 app.use('/api/*', async (c, next) => {
   const hostname = new URL(c.req.url).hostname
   if (

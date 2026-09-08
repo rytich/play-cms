@@ -254,8 +254,8 @@ export async function revokeAccessCode(
 ) {
   const result = await db
     .prepare(
-      `UPDATE access_codes SET revoked_at = COALESCE(revoked_at, ?)
-       WHERE id = ? AND video_id = ?`,
+      `UPDATE access_codes SET revoked_at = ?
+       WHERE id = ? AND video_id = ? AND revoked_at IS NULL`,
     )
     .bind(now, codeId, videoId)
     .run()

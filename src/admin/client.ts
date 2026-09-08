@@ -1,3 +1,34 @@
+import { validPassword } from '../core/admin'
+
+export type IssuedCode = {
+  id: string
+  code: string
+  createdAt: string
+}
+
+export function passwordValidationError(password: string) {
+  return validPassword(password)
+    ? null
+    : 'パスワードは12文字以上かつUTF-8で128バイト以下にしてください。'
+}
+
+export function acceptIssuedCodeForSelection(
+  selectedVideoId: string | null,
+  requestedVideoId: string,
+  issued: IssuedCode,
+) {
+  if (selectedVideoId !== requestedVideoId) return null
+  return {
+    issuedCode: issued.code,
+    metadata: {
+      id: issued.id,
+      createdAt: issued.createdAt,
+      revokedAt: null,
+      status: 'unused' as const,
+    },
+  }
+}
+
 export class AdminRequestError extends Error {
   constructor(
     message: string,
