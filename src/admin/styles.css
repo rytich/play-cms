@@ -1,0 +1,319 @@
+:root {
+  color: #172033;
+  background: #f5f7fa;
+  font-family:
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    sans-serif;
+  font-synthesis: none;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
+
+.site-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 68px;
+  padding: 12px clamp(18px, 4vw, 56px);
+  color: white;
+  background: #172033;
+}
+
+.site-header > div {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+h1,
+h2,
+p {
+  margin-top: 0;
+}
+
+h1 {
+  margin-bottom: 0;
+  font-size: 1.45rem;
+}
+
+h2 {
+  margin-bottom: 8px;
+  font-size: 1.18rem;
+}
+
+.badge {
+  border: 1px solid #9eacc8;
+  border-radius: 99px;
+  padding: 3px 8px;
+  color: #dfe8fa;
+  font-size: 0.78rem;
+}
+
+main {
+  width: min(1180px, calc(100% - 32px));
+  margin: 24px auto 48px;
+}
+
+.notice {
+  display: flex;
+  gap: 10px 18px;
+  align-items: baseline;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
+  border: 1px solid #e3b84f;
+  border-radius: 10px;
+  padding: 13px 16px;
+  background: #fff7da;
+  color: #5c4410;
+}
+
+.card {
+  border: 1px solid #d9dee8;
+  border-radius: 12px;
+  padding: 22px;
+  background: white;
+  box-shadow: 0 2px 10px rgb(23 32 51 / 5%);
+}
+
+.narrow {
+  max-width: 520px;
+  margin: 42px auto;
+}
+
+.admin-grid {
+  display: grid;
+  grid-template-columns: minmax(280px, 0.8fr) minmax(420px, 1.2fr);
+  gap: 20px;
+}
+
+.stack {
+  display: grid;
+  align-content: start;
+  gap: 20px;
+}
+
+.section-heading {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.subtle,
+.empty,
+small {
+  color: #68738a;
+}
+
+.subtle {
+  margin-bottom: 16px;
+  font-size: 0.9rem;
+}
+
+.draft-note {
+  border-left: 3px solid #7990bb;
+  padding-left: 10px;
+  color: #4b5872;
+}
+
+form {
+  display: grid;
+  gap: 15px;
+}
+
+label {
+  display: grid;
+  gap: 6px;
+  font-size: 0.9rem;
+  font-weight: 650;
+}
+
+input,
+textarea {
+  width: 100%;
+  border: 1px solid #abb5c8;
+  border-radius: 7px;
+  padding: 10px 11px;
+  color: #172033;
+  background: white;
+}
+
+input:focus,
+textarea:focus {
+  outline: 3px solid #cddcff;
+  border-color: #315fa9;
+}
+
+textarea {
+  resize: vertical;
+}
+
+.date-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+button {
+  border: 1px solid #244d8e;
+  border-radius: 7px;
+  padding: 9px 13px;
+  background: #315fa9;
+  color: white;
+  font-weight: 700;
+}
+
+.secondary {
+  border-color: #9aa6bb;
+  background: white;
+  color: #243149;
+}
+
+.site-header .secondary {
+  border-color: #8493af;
+  background: transparent;
+  color: white;
+}
+
+.danger {
+  border-color: #b84545;
+  background: white;
+  color: #9a2d2d;
+}
+
+.error {
+  margin-bottom: 0;
+  border-radius: 7px;
+  padding: 10px;
+  background: #fff0f0;
+  color: #9a2d2d;
+}
+
+.video-list,
+.code-list {
+  list-style: none;
+  margin: 12px 0;
+  padding: 0;
+}
+
+.video-list li + li,
+.code-list li + li {
+  border-top: 1px solid #e5e8ef;
+}
+
+.row-button,
+.selected-row {
+  display: grid;
+  width: 100%;
+  gap: 4px;
+  border: 0;
+  border-radius: 0;
+  padding: 13px 10px;
+  text-align: left;
+  background: white;
+  color: #172033;
+}
+
+.selected-row {
+  background: #eaf1ff;
+}
+
+.row-button span,
+.selected-row span {
+  color: #68738a;
+  font-size: 0.82rem;
+}
+
+.pager {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: #68738a;
+  font-size: 0.84rem;
+}
+
+.issued-key {
+  margin: 12px 0 18px;
+  border: 2px solid #315fa9;
+  border-radius: 9px;
+  padding: 16px;
+  background: #edf4ff;
+}
+
+.issued-key p:last-child {
+  margin-bottom: 0;
+}
+
+.key-value {
+  margin-bottom: 8px;
+  overflow-wrap: anywhere;
+  font:
+    700 1.35rem ui-monospace,
+    monospace;
+  letter-spacing: 0.06em;
+}
+
+.code-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 13px 0;
+}
+
+.code-list li div {
+  display: grid;
+  gap: 3px;
+}
+
+.code-list span,
+.code-list small {
+  font-size: 0.82rem;
+}
+
+.loading {
+  padding: 52px 0;
+  color: #68738a;
+  text-align: center;
+}
+
+@media (max-width: 820px) {
+  .admin-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .date-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .section-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}
