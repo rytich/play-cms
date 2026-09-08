@@ -2,6 +2,7 @@ import { useRef, useState } from 'react'
 import type { MouseEvent, ReactNode } from 'react'
 
 import { Brand } from '../components/Brand'
+import { shouldHandleSameDocumentLink } from '../navigation'
 
 type AdminLayoutProps = {
   siteName: string
@@ -24,6 +25,7 @@ export function AdminLayout({
   const menuButton = useRef<HTMLButtonElement>(null)
 
   function followVideos(event: MouseEvent<HTMLAnchorElement>) {
+    if (!shouldHandleSameDocumentLink(event)) return
     if (onVideos() === false) event.preventDefault()
     setMenuOpen(false)
   }

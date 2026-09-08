@@ -12,6 +12,21 @@ export function shouldWarnBeforeUnload(
   return dirty && !confirmedDiscard
 }
 
+export function videoDateRangeError(
+  startsAt: string,
+  endsAt: string,
+): string | null {
+  if (!startsAt || !endsAt) return null
+  const starts = Date.parse(startsAt)
+  const ends = Date.parse(endsAt)
+  if (!Number.isFinite(starts) || !Number.isFinite(ends)) return null
+  return starts >= ends ? '終了日時は開始日時より後にしてください。' : null
+}
+
+export function revokeCodeConfirmation(codeId: string): string {
+  return `未使用の閲覧用キー（ID: ${codeId}）を取り消しますか？`
+}
+
 export type VideoFormValues = Readonly<{
   filmaFileId: string
   title: string

@@ -13,6 +13,7 @@ import type { Video } from '../core/admin'
 import { brand, isBrandAssetPath } from '../ui/brand'
 import { AdminLayout } from '../ui/layouts/AdminLayout'
 import { AuthLayout } from '../ui/layouts/AuthLayout'
+import { shouldHandleSameDocumentLink } from '../ui/navigation'
 import '../ui/base.css'
 import {
   AdminRequestError,
@@ -34,10 +35,13 @@ import type { AdminRoute } from './routes'
 import {
   canLeaveEditor,
   isVideoFormDirty,
+  revokeCodeConfirmation,
   shouldWarnBeforeUnload,
+  videoDateRangeError,
   videoListRangeLabel,
   type VideoFormValues,
 } from './ui-state'
+import { VideoDateFields } from './VideoDateFields'
 import './styles.css'
 
 type CodeMetadata = {
@@ -486,6 +490,7 @@ function VideoEditorPage({
   const [error, setError] = useState('')
   const [saved, setSaved] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [dateRangeError, setDateRangeError] = useState<string | null>(null)
   const heading = usePageHeading(isNew ? '動画を登録' : '動画を編集')
   const errorSummary = useRef<HTMLParagraphElement>(null)
   const confirmedNavigation = useRef(false)
@@ -543,14 +548,21 @@ function VideoEditorPage({
   }
 
   function followLink(event: MouseEvent<HTMLAnchorElement>) {
+    if (!shouldHandleSameDocumentLink(event)) return
     if (!confirmNavigation()) event.preventDefault()
   }
 
   async function saveVideo(event: FormEvent) {
     event.preventDefault()
-    setBusy(true)
     setError('')
     setSaved(false)
+    const nextDateRangeError = videoDateRangeError(form.startsAt, form.endsAt)
+    setDateRangeError(nextDateRangeError)
+    if (nextDateRangeError) {
+      setError(nextDateRangeError)
+      return
+    }
+    setBusy(true)
     try {
       const payload = {
         ...form,
@@ -570,6 +582,7 @@ function VideoEditorPage({
       setVideo(result.video)
       setForm(nextForm)
       setSavedForm(nextForm)
+      setDateRangeError(null)
       if (isNew) {
         window.location.replace(adminVideoEditUrl(result.video.id, offset))
       } else {
@@ -581,6 +594,7 @@ function VideoEditorPage({
         setForm(emptyVideoForm)
         onUnauthorized()
       } else {
+        setDateRangeError(null)
         setError(visibleError(caught))
       }
     } finally {
@@ -657,31 +671,23 @@ function VideoEditorPage({
               }
             />
           </label>
-          <div className="date-grid">
-            <label>
-              開始日時
-              <input
-                type="datetime-local"
-                required
-                value={form.startsAt}
-                onChange={(event) =>
-                  setForm({ ...form, startsAt: event.target.value })
-                }
-              />
-            </label>
-            <label>
-              終了日時
-              <input
-                type="datetime-local"
-                required
-                value={form.endsAt}
-                onChange={(event) =>
-                  setForm({ ...form, endsAt: event.target.value })
-                }
-              />
-            </label>
-          </div>
-          {error && (
+          <VideoDateFields
+            startsAt={form.startsAt}
+            endsAt={form.endsAt}
+            dateRangeError={dateRangeError}
+            errorRef={errorSummary}
+            onStartsAtChange={(startsAt) => {
+              setForm({ ...form, startsAt })
+              setDateRangeError(null)
+              setError('')
+            }}
+            onEndsAtChange={(endsAt) => {
+              setForm({ ...form, endsAt })
+              setDateRangeError(null)
+              setError('')
+            }}
+          />
+          {error && !dateRangeError && (
             <p ref={errorSummary} className="error" role="alert" tabIndex={-1}>
               {error}
             </p>
@@ -839,7 +845,7 @@ function VideoCodesPage({
   }
 
   async function revokeCode(codeId: string) {
-    if (!window.confirm('この未使用の閲覧用キーを取り消しますか？')) return
+    if (!window.confirm(revokeCodeConfirmation(codeId))) return
     setIssuedCode(null)
     setCopyStatus('')
     setBusy(true)
