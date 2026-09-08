@@ -6,8 +6,9 @@ import {
   AdminRequestError,
   acceptIssuedCodeForSelection,
   adminRequest,
+  loginPasswordValidationError,
   localDateTime,
-  passwordValidationError,
+  newPasswordValidationError,
   toIsoDateTime,
 } from './client'
 import './styles.css'
@@ -54,7 +55,7 @@ function LoginForm({ onAuthenticated }: { onAuthenticated: () => void }) {
 
   async function submit(event: FormEvent) {
     event.preventDefault()
-    const validationError = passwordValidationError(password)
+    const validationError = loginPasswordValidationError(password)
     if (validationError) {
       setError(validationError)
       setPassword('')
@@ -96,7 +97,6 @@ function LoginForm({ onAuthenticated }: { onAuthenticated: () => void }) {
             type="password"
             autoComplete="current-password"
             required
-            minLength={12}
             maxLength={128}
             value={password}
             onChange={(event) => setPassword(event.target.value)}
@@ -127,7 +127,7 @@ function SetupForm({ onComplete }: { onComplete: () => void }) {
 
   async function submit(event: FormEvent) {
     event.preventDefault()
-    const validationError = passwordValidationError(password)
+    const validationError = newPasswordValidationError(password)
     if (validationError) {
       setError(validationError)
       setPassword('')

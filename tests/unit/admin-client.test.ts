@@ -3,19 +3,30 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   acceptIssuedCodeForSelection,
   adminRequest,
+  loginPasswordValidationError,
   localDateTime,
-  passwordValidationError,
+  newPasswordValidationError,
   toIsoDateTime,
 } from '../../src/admin/client'
 
 afterEach(() => vi.unstubAllGlobals())
 
 describe('admin client', () => {
-  it('uses the API password policy for multilingual input', () => {
-    expect(passwordValidationError('🔐🔐🔐')).not.toBeNull()
-    expect(passwordValidationError('あいうえ')).not.toBeNull()
-    expect(passwordValidationError('あいうえおかきくけこさし')).toBeNull()
-    expect(passwordValidationError('🔐'.repeat(33))).not.toBeNull()
+  it('uses the stronger new-password policy for multilingual setup', () => {
+    expect(newPasswordValidationError('🔐🔐🔐')).not.toBeNull()
+    expect(newPasswordValidationError('あいうえ')).not.toBeNull()
+    expect(newPasswordValidationError('あいうえおかきくけこさし')).toBeNull()
+    expect(newPasswordValidationError('🔐'.repeat(33))).not.toBeNull()
+  })
+
+  it('allows legacy byte-valid passwords only at login', () => {
+    for (const password of ['🔐'.repeat(6), '🔐'.repeat(3), 'あいうえ']) {
+      expect(loginPasswordValidationError(password)).toBeNull()
+      expect(newPasswordValidationError(password)).not.toBeNull()
+    }
+    expect(loginPasswordValidationError('a'.repeat(11))).not.toBeNull()
+    expect(loginPasswordValidationError('a'.repeat(128))).toBeNull()
+    expect(loginPasswordValidationError('a'.repeat(129))).not.toBeNull()
   })
 
   it('does not accept a delayed key for a newly selected video', async () => {

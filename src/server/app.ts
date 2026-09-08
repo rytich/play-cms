@@ -31,7 +31,8 @@ import {
   normalizeEmail,
   parseOffset,
   parseVideoInput,
-  validPassword,
+  validLoginPassword,
+  validNewPassword,
 } from '../core/admin'
 import {
   applyRateLimit,
@@ -139,7 +140,7 @@ app.post('/api/admin/setup', async (c) => {
     return c.json(errorBody.invalid, 400)
   }
   const email = normalizeEmail(body.value.email)
-  if (!email || !validPassword(body.value.password)) {
+  if (!email || !validNewPassword(body.value.password)) {
     return c.json(errorBody.invalid, 400)
   }
 
@@ -200,7 +201,7 @@ app.post('/api/auth/login', async (c) => {
     return c.json(errorBody.invalid, 400)
   }
   const email = normalizeEmail(body.value.email)
-  if (!email || !validPassword(body.value.password)) {
+  if (!email || !validLoginPassword(body.value.password)) {
     return c.json(errorBody.invalid, 400)
   }
 

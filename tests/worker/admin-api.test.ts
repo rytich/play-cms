@@ -2,6 +2,7 @@ import { env, exports } from 'cloudflare:workers'
 import { beforeEach, describe, expect, it } from 'vitest'
 
 import { app } from '../../src/server/app'
+import { hashPassword } from '../../src/adapters/secrets/web-crypto'
 
 const bootstrapToken = 'a'.repeat(64)
 const jsonHeaders = {
@@ -244,6 +245,46 @@ describe('admin API', () => {
 
     const valid = await setupAdmin({ password: 'あいうえおかきくけこさし' })
     expect(valid.status).toBe(201)
+  })
+
+  it('logs in byte-valid accounts created under the previous policy', async () => {
+    const legacyPasswords = ['🔐'.repeat(6), '🔐'.repeat(3), 'あいうえ']
+    await env.DATABASE.prepare(
+      `INSERT INTO accounts (id, role, email, password_hash, created_at)
+       VALUES (?, 'admin', ?, ?, ?)`,
+    )
+      .bind(
+        'legacy-admin',
+        validAdmin.email,
+        await hashPassword(legacyPasswords[0]!),
+        1,
+      )
+      .run()
+
+    for (const password of legacyPasswords) {
+      await env.DATABASE.prepare(
+        'UPDATE accounts SET password_hash = ? WHERE id = ?',
+      )
+        .bind(await hashPassword(password), 'legacy-admin')
+        .run()
+
+      const setup = await setupAdmin({ password })
+      expect(setup.status).toBe(400)
+
+      const response = await login({ password })
+      expect(response.status).toBe(200)
+      expect(await response.json()).toEqual({ authenticated: true })
+    }
+  })
+
+  it('keeps the 128-byte limit for setup and login', async () => {
+    const maximum = 'a'.repeat(128)
+    const oversized = 'a'.repeat(129)
+
+    expect((await setupAdmin({ password: maximum })).status).toBe(201)
+    expect((await login({ password: maximum })).status).toBe(200)
+    expect((await setupAdmin({ password: oversized })).status).toBe(400)
+    expect((await login({ password: oversized })).status).toBe(400)
   })
 
   it('logs in with secure cookie flags and stores only the session hash', async () => {

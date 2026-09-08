@@ -23,7 +23,7 @@ APIキーの保存・接続設定、実Filma通信、視聴者認証・視聴権
 
 初期登録は256bit以上のランダムなローカルbootstrap tokenと管理者未作成・未使用状態を要求し、DB制約とtransactionで一件に限定する。パスワードはsalt付きハッシュ、sessionと閲覧用キーはSHA-256ハッシュだけ保存する。sessionは8時間、HttpOnly/Secure/SameSite=Lax cookieを使う。
 
-管理者パスワードはUnicode code pointで12文字以上、UTF-8で128バイト以下とし、UIとAPIで同じ検証を使う。PBKDF2-HMAC-SHA-256の600,000 iterationsは維持する。
+新規設定する管理者パスワードはUnicode code pointで12文字以上、UTF-8で128バイト以下とし、UIとAPIで同じ検証を使う。ログイン入力は旧版で作成済みのhashとの互換性を保つため、UTF-8で12〜128バイトの値をhash照合へ渡すが、この互換条件を新規設定には使わない。PBKDF2-HMAC-SHA-256の600,000 iterationsは維持する。
 
 状態変更は同一Origin、application/json、16KiB以下、余分なfield拒否。管理APIは毎回admin roleを検証する。共有D1 rate limitは初期登録5回/15分、login10回/client・5回/account/15分。localhostのみのclient bucketを使い、本番でのIP判定の代用にしない。管理者の書込は60回/分に制限するが、発行総数は制限しない。DB・暗号・構成エラーは秘密を含まない503とする。
 

@@ -1,4 +1,4 @@
-import { validPassword } from '../core/admin'
+import { validLoginPassword, validNewPassword } from '../core/admin'
 
 export type IssuedCode = {
   id: string
@@ -6,10 +6,16 @@ export type IssuedCode = {
   createdAt: string
 }
 
-export function passwordValidationError(password: string) {
-  return validPassword(password)
+export function newPasswordValidationError(password: string) {
+  return validNewPassword(password)
     ? null
     : 'パスワードは12文字以上かつUTF-8で128バイト以下にしてください。'
+}
+
+export function loginPasswordValidationError(password: string) {
+  return validLoginPassword(password)
+    ? null
+    : 'パスワードはUTF-8で12〜128バイトにしてください。'
 }
 
 export function acceptIssuedCodeForSelection(

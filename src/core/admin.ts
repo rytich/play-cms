@@ -41,10 +41,20 @@ export function normalizeEmail(value: unknown): string | null {
   return email
 }
 
-export function validPassword(value: unknown): value is string {
+function passwordByteLength(value: string) {
+  return new TextEncoder().encode(value).byteLength
+}
+
+export function validNewPassword(value: unknown): value is string {
   if (typeof value !== 'string') return false
-  const bytes = new TextEncoder().encode(value).byteLength
+  const bytes = passwordByteLength(value)
   return Array.from(value).length >= 12 && bytes <= 128
+}
+
+export function validLoginPassword(value: unknown): value is string {
+  if (typeof value !== 'string') return false
+  const bytes = passwordByteLength(value)
+  return bytes >= 12 && bytes <= 128
 }
 
 function canonicalIso(value: unknown): string | null {
