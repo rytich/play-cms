@@ -29,6 +29,8 @@ Cloudflare用とNode.js用のビルドをTask 7で導入するまでは、Task�
 
 ## 必須確認
 
+Task 8のCI・ruleset部分は[最小構成](docs/development/minimal-guardrails.md)として先行導入します（Issue #12・#13・#14）。実設定の検証後は`verify`成功を必須とし、CI待ち中も独立レビューを進めます。未実装のDocker、Live API、デプロイは通常PRの必須条件にしません。
+
 ```bash
 pnpm verify
 ```
