@@ -11,5 +11,7 @@
 7. 完了報告前に`pnpm verify`を実行し、結果をIssueとPRへ記録する。
 8. PR作成後は別エージェントに`.agents/skills/play-cms-reviewer/SKILL.md`を読ませ、独立レビューを実行する。
 9. 自動Approve・自動Mergeは`docs/decisions/0002-use-knryt-automated-pr-reviewer.md`の条件を満たす`knryt`レビューワーだけが実行する。
+10. モデルの役割分担は`docs/development/workflow.md`の「モデルと担当」に従う。6 Astraは上流工程、コード実装・テスト修正は5.6系の担当一体に集約する。
 
 秘密情報をコミット、ログ出力、IssueやPRへ記載しないでください。脆弱性を公開Issueで報告せず、`SECURITY.md`へ誘導してください。
+通常のWorkerテストと`pnpm verify`は専用の合成設定だけを使い、開発者の`.dev.vars`を読み込ませません。秘密分離のsentinel確認は、実ファイルを変更せずOSの一時fixtureで行ってください。
