@@ -3,6 +3,7 @@
 - 状態: **提案・ユーザー承認待ち。UI未実装**
 - 作成・調査日: 2026-09-08
 - Tracking: [Issue #22](https://github.com/rytich/play-cms/issues/22)
+- 文書PR: [Draft PR #23](https://github.com/rytich/play-cms/pull/23)
 - 対象: React/Viteによるplay-cmsの外観と画面導線。CMS本体の採用変更ではない。
 - 正本: [基盤設計](2026-09-03-foundation-design.md)、[ADR 0001](../../decisions/0001-use-lightweight-portable-architecture.md)、[セキュリティ方針](../../../SECURITY.md)
 - 先行仕様: [P0設計（参照時の固定コミット）](https://github.com/rytich/play-cms/blob/69408ac76bd5e0fff5a20005be6b2e36082a3397/docs/superpowers/specs/2026-09-07-p0-prototype-design.md)、[管理機能先行の承認追補](https://github.com/rytich/play-cms/blob/69408ac76bd5e0fff5a20005be6b2e36082a3397/docs/development/admin-first-prototype.md)
