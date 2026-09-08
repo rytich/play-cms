@@ -62,7 +62,7 @@
 
 **Files:** 上記のCreate / Modify / Testを対象とする。URL要件に伴い`src/admin/routes.ts`と`tests/unit/admin-routes.test.ts`を追加対象とし、`src/server/app.ts`と`tests/worker/admin-api.test.ts`は単一動画読取と直アクセスの防御検証に限定して変更可能。DB schema・暗号・認証方式は対象外。
 
-**URL実装契約:** `/admin/videos`、`/admin/videos/new`、`/admin/videos/:videoId/edit`、`/admin/videos/:videoId/codes`を解釈する小さな経路判定を用意する。ログイン・初期設定経路は維持する。個別画面は認証確認後に`GET /api/admin/videos/:id`で既存CMS IDの動画を取得し、直前の一覧取得に依存しない。既存の管理者認証・ID検証・no-store・安全な失敗応答を再利用し、未認証401、権限不足403、不正入力400、対象なし404、内部障害503を検証する。ID形式は既存APIと一致させ、全件走査や新しいDBアクセス層を作らない。稼働中環境は変更しない。
+**URL実装契約:** `/admin/videos`、`/admin/videos/new`、`/admin/videos/:videoId/edit`、`/admin/videos/:videoId/codes`を解釈する小さな経路判定を用意する。ログイン・初期設定経路は維持する。個別画面は認証確認後に`GET /api/admin/videos/:id`で既存CMS IDの動画を取得し、直前の一覧取得に依存しない。既存の管理者認証・no-store・安全な失敗応答を再利用し、有効な管理者セッションなし401、対象なし404、内部障害503を検証する。既存APIには経路IDの形式検証がないため、IDは既存のパラメーター化DB検索へ渡し、不正形式で一致しないIDも404とする。このTaskで新しいID形式の400契約やrole別の403分岐を追加しない。全件走査や新しいDBアクセス層を作らない。稼働中環境は変更しない。
 
 一覧offsetと戻り先は許可済み内部パス／有効offsetだけを使う。通常リンクとページ読み込みを基本とし、クライアント状態はURLから導出する。汎用ルーターの自作や新規依存は加えない。GET画面表示だけでは保存・キー発行・消費・取消を起こさない。新規保存成功後は作成済みIDの編集URLへ置き換え、失敗時は新規URLに入力を保持する。
 
