@@ -22,6 +22,7 @@ pnpm verify
 
 ## 文書
 
+- [テーマ差し替え・管理者／視聴者UI仕様案（承認待ち）](docs/superpowers/specs/2026-09-08-ui-theme-navigation-design.md)
 - [基盤設計](docs/superpowers/specs/2026-09-03-foundation-design.md)
 - [実装計画](docs/superpowers/plans/2026-09-03-foundation-implementation.md)
 - [Filma実API契約テスト](docs/development/filma-live-api-testing.md)
