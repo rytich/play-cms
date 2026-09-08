@@ -3,6 +3,7 @@
 - 状態: 採用
 - 決定日: 2026-09-03
 - Tracking: [GitHub Issue #4](https://github.com/rytich/play-cms/issues/4)
+- 最小構成の先行導入: [Issue #12](https://github.com/rytich/play-cms/issues/12) / [Issue #13](https://github.com/rytich/play-cms/issues/13) / [Issue #14](https://github.com/rytich/play-cms/issues/14)
 
 ## 背景
 
@@ -35,6 +36,8 @@ Webhook受信層は`X-Hub-Signature-256`を検証し、`pull_request`の許可ac
 - Issueクローズとソースブランチ削除は自動化しない。
 
 ## 資格情報
+
+Task 8のCI・ruleset部分だけを先行導入し、実際に有効化・検証できた時点から本ADRのTask 8以降のマージ条件を適用する。その他のTask 8作業を待つ必要はない。[最小のPRガードレール](../development/minimal-guardrails.md)を導入・待機・停止条件の正本とする。独立レビューとCIを並行実行し、CI待機は同じレビュー処理内で上限10分にする。`--auto`予約は使わず、待機後のbase/head再検証を維持する。
 
 `knryt`資格情報は`rytich/play-cms`だけを対象にし、ApproveとMergeに必要な最小権限へ限定する。Webhook Secret、PAT、OAuth token、Cookie、Tunnel credentialは文書、Issue、PR、プロンプト、ログへ記録しない。資格情報の存在や権限を確認できない場合はGitHub操作フェーズへ進まない。
 
