@@ -34,6 +34,7 @@ import type { AdminRoute } from './routes'
 import {
   canLeaveEditor,
   isVideoFormDirty,
+  shouldWarnBeforeUnload,
   videoListRangeLabel,
   type VideoFormValues,
 } from './ui-state'
@@ -85,10 +86,14 @@ function usePageHeading(pageName: string) {
   return heading
 }
 
-function useBeforeUnload(dirty: boolean) {
+function useBeforeUnload(
+  dirty: boolean,
+  confirmedNavigation: { readonly current: boolean },
+) {
   useEffect(() => {
     if (!dirty) return
     const warn = (event: BeforeUnloadEvent) => {
+      if (!shouldWarnBeforeUnload(dirty, confirmedNavigation.current)) return
       event.preventDefault()
       event.returnValue = ''
     }
@@ -483,8 +488,9 @@ function VideoEditorPage({
   const [busy, setBusy] = useState(false)
   const heading = usePageHeading(isNew ? '動画を登録' : '動画を編集')
   const errorSummary = useRef<HTMLParagraphElement>(null)
+  const confirmedNavigation = useRef(false)
   const dirty = isVideoFormDirty(form, savedForm)
-  useBeforeUnload(dirty)
+  useBeforeUnload(dirty, confirmedNavigation)
 
   useEffect(() => {
     if (route.kind !== 'edit-video') return
@@ -523,10 +529,17 @@ function VideoEditorPage({
 
   function confirmNavigation() {
     if (!dirty) return true
-    return canLeaveEditor(
+    const canLeave = canLeaveEditor(
       true,
       window.confirm('保存していない変更を破棄して移動しますか？'),
     )
+    if (canLeave) {
+      confirmedNavigation.current = true
+      window.setTimeout(() => {
+        confirmedNavigation.current = false
+      }, 0)
+    }
+    return canLeave
   }
 
   function followLink(event: MouseEvent<HTMLAnchorElement>) {

@@ -5,6 +5,13 @@ export function canLeaveEditor(
   return !dirty || confirmedDiscard
 }
 
+export function shouldWarnBeforeUnload(
+  dirty: boolean,
+  confirmedDiscard: boolean,
+): boolean {
+  return dirty && !confirmedDiscard
+}
+
 export type VideoFormValues = Readonly<{
   filmaFileId: string
   title: string

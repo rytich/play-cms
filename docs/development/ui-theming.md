@@ -1,6 +1,6 @@
 # 管理画面のテーマ差し替え
 
-Tracking: [Issue #24](https://github.com/rytich/play-cms/issues/24) / [承認済み仕様](../superpowers/specs/2026-09-08-ui-theme-navigation-design.md)
+Tracking: [Issue #24](https://github.com/rytich/play-cms/issues/24) / [Draft PR #27](https://github.com/rytich/play-cms/pull/27) / [承認済み仕様](../superpowers/specs/2026-09-08-ui-theme-navigation-design.md)
 
 管理画面のブランド表示と色は、レビュー対象のビルド入力として差し替える。ブラウザからテーマを登録する機能やDB設定はない。外部CSS、外部フォント、外部画像、`@import`、任意HTML・JavaScriptを追加しない。
 
@@ -40,6 +40,8 @@ pnpm build:ui
 実ブラウザ確認では、既存の`.wrangler/state`や稼働中サーバーを使わない。OSの一時ディレクトリに権限700の新しいD1永続化先とChrome profileを別々に作り、合成データだけを入れる。サーバーは`127.0.0.1`の空いている別ポートへ固定し、Chromeも専用profileと専用デバッグポートで起動する。Cookieはポート間で共有され得るため、ポート変更だけを分離とは扱わない。
 
 一覧では表示範囲と日時のタイムゾーン表記を確認する。終了時は自分が起動した試験サーバーと試験Chromeだけを停止し、既存ポート、既存D1、秘密設定は変更しない。
+
+依頼者が手動確認する間だけ、試験Chromeを閉じた後も合成データ専用サーバーを一時プレビューとして残してよい。この例外は明示依頼がある場合に限り、URL、正確なPID、再起動手順、停止手順を非公開の作業記録で引き渡す。一時ディレクトリは再起動やOSの整理で失われ得る。停止時は`lsof -nP -iTCP:<port> -sTCP:LISTEN`で対象PIDを再確認し、そのPIDだけへ`TERM`を送り、`pkill`等で他の開発サーバーを巻き込まない。
 
 ## 元へ戻す
 

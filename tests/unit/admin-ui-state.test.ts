@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   canLeaveEditor,
   isVideoFormDirty,
+  shouldWarnBeforeUnload,
   videoListRangeLabel,
 } from '../../src/admin/ui-state'
 
@@ -11,6 +12,12 @@ describe('admin UI state', () => {
     expect(canLeaveEditor(true, false)).toBe(false)
     expect(canLeaveEditor(true, true)).toBe(true)
     expect(canLeaveEditor(false, false)).toBe(true)
+  })
+
+  it('does not show a second unload warning after discard was confirmed', () => {
+    expect(shouldWarnBeforeUnload(true, false)).toBe(true)
+    expect(shouldWarnBeforeUnload(true, true)).toBe(false)
+    expect(shouldWarnBeforeUnload(false, false)).toBe(false)
   })
 
   it('detects a change from the last saved editor values', () => {
