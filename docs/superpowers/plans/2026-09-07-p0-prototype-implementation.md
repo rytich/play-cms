@@ -151,7 +151,9 @@ PR #7へ新head SHA、検証結果、残課題を追記する。別レビュー�
 
 ### Task 2: Filmaの既存動画・再生契約を4時間で確定する
 
-**Tracking:** 開始前に`Spike: Filma既存動画と再生契約を確認する` Issueを作成する。
+**Tracking:** [GitHub Issue #16](https://github.com/rytich/play-cms/issues/16)
+
+**調査結果（2026-09-07）:** [Filma playback contract](../../development/filma-playback-contract.md)。現行GO条件に対してNO-GO。後続Taskの開始条件は変更しない。
 
 **Files:**
 
