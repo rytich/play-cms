@@ -1,6 +1,6 @@
 # テーマ差し替えと管理者・視聴者UI仕様案
 
-- 状態: **仕様承認済み（2026-09-08）。UI未実装**
+- 状態: **仕様承認済み（2026-09-08）。管理UI実装済み・ブラウザ受入一部未完了（PRマージ前）**
 - 作成・調査日: 2026-09-08
 - Tracking: [Issue #22](https://github.com/rytich/play-cms/issues/22)
 - URL画面遷移の追加要件: [Issue #25](https://github.com/rytich/play-cms/issues/25)。文書レビューとコード実装の完了は別扱い。

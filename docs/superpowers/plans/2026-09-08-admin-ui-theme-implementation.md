@@ -96,11 +96,11 @@ type AdminLayoutProps = {
 // canLeaveEditor(dirty: boolean, confirmedDiscard: boolean): boolean
 ```
 
-- [ ] **Step 1: 前提と安全な検証環境を確認する。**
+- [x] **Step 1: 前提と安全な検証環境を確認する。**
 
 PR #20 / #23のマージと最新developの内容、独立レビューの解消状況を確認し、Issue #24へ開始SHA・ブランチ名を記録する。専用作業場所の合成データ・秘密を含まないテスト設定で既存`pnpm verify`を実行し、基準結果を保存する。既存の稼働サーバー、`.dev.vars`、ローカルD1をコピー・初期化・停止しない。実ブラウザ用の試験が必要なら別のloopbackポートを使う。
 
-- [ ] **Step 2: ブランド境界と未保存判断の失敗するテストを書く。**
+- [x] **Step 2: ブランド境界と未保存判断の失敗するテストを書く。**
 
 `tests/unit/ui-brand.test.ts`には以下を置く。まだbrand.tsがない段階の失敗を確認する。
 
@@ -147,7 +147,7 @@ it('keeps unsaved input unless discard is confirmed', () => {
 
 実行: `pnpm vitest run tests/unit/ui-brand.test.ts tests/unit/admin-ui-state.test.ts`。Expected: 未作成moduleによるFAIL。既存APIや暗号の失敗をこのREDとして数えない。
 
-- [ ] **Step 3: 設定・最小判断関数・CSSを実装する。**
+- [x] **Step 3: 設定・最小判断関数・CSSを実装する。**
 
 brand.tsは上記型と定数をexportし、パス判定はkindごとの正規表現で完全一致にする。判定NGは画像を描画せずテキストへ戻す。未保存判定の実装は次に限定し、ナビ側で確認結果を渡す。
 
@@ -175,7 +175,7 @@ export function canLeaveEditor(
 
 実行: Step 2の同一コマンド。Expected: PASS。CSS値を変えても判断関数・APIが変わらない構成にする。
 
-- [ ] **Step 4: 共通枠の失敗するテストを書く。**
+- [x] **Step 4: 共通枠の失敗するテストを書く。**
 
 `tests/unit/ui-layout.test.tsx`で、既存React DOM Serverによる静的HTMLを検査する。状態遷移やCSSの見え方はこのテストだけで検証済みと扱わない。
 
@@ -214,7 +214,7 @@ it('renders only available admin navigation and the prototype boundary', () => {
 
 実行: `pnpm vitest run tests/unit/ui-layout.test.tsx`。Expected: 未作成layoutによるFAIL。同じファイルにAuthLayoutの一列フォーム枠とBrandのnull/不正パス時にimgがないケースを追加する。
 
-- [ ] **Step 5: 枠を実装し、管理画面に組み込む。**
+- [x] **Step 5: 枠を実装し、管理画面に組み込む。**
 
 Brandは有効画像だけを`img`で描画し、onErrorでテキストへ戻す。siteNameはReact文字列として出力する。設定したfaviconが有効なときだけ同一サイト内のlink要素へ適用し、未設定なら追加しない。
 
@@ -237,7 +237,7 @@ Appの既存ログイン判定を維持し、ログイン・初期設定だけAu
 
 実行: `pnpm vitest run tests/unit/ui-brand.test.ts tests/unit/admin-ui-state.test.ts tests/unit/ui-layout.test.tsx`、`pnpm typecheck`。Expected: PASS。APIキー設定・公開・再生のUIは出さない。
 
-- [ ] **Step 6: 一覧→編集→キーの操作を整える。**
+- [x] **Step 6: 一覧→編集→キーの操作を整える。**
 
 AdminVideosの表示状態はURLから一覧／新規／編集／キー管理へ解決し、メモリ内の`list`/`editor`だけで画面を切り替えない。一覧の「動画を登録」、行の「編集」、動画内の「基本情報」「閲覧用キー」、「一覧へ戻る」は実際のhrefを持つリンクとする。既存ページ送りはURLのoffsetと一致させ、画面変更後に対応見出しへフォーカスする。`returnToList`とAdminLayoutの`onVideos`を使う場合も同じ検証済み一覧URLへ移動し、別タブ操作を妨げない。DOM検索で隠れたボタンを押すような間接接続はしない。
 
@@ -250,6 +250,8 @@ AdminVideosの表示状態はURLから一覧／新規／編集／キー管理へ
 ここではPR #20で解消した非同期応答・秘密表示の防御を維持する。新たに不具合が見つかった場合は既存の実装担当へ戻し、範囲と防御テストをIssueで明確にしてから対処する。
 
 - [ ] **Step 7: 実ブラウザで受入条件を検証する。**
+
+2026-09-08時点で、隔離した合成D1・別loopbackポート・専用Chrome profileにより、初回設定、ログイン、100件／101件目のページ送り、320／375／768／960／1280px表示、編集直URL、実際の戻る／進むを確認した。新規保存後の再読込、未保存確認、キーの一時表示と消去、logout後の保護データ消去はブラウザ操作基盤の接続停止により未検証のため、本Stepは未完了のままとする。自動テストの失敗ではなく、実ブラウザ受入の確認不足としてIssue #24へ引き継ぐ。
 
 合成データ専用のlocalhost環境を使用する。以下は手動/利用可能なブラウザ操作で検証し、結果を表でIssue #24へ記録する。未検証セルを成功にしない。
 
@@ -273,7 +275,9 @@ AdminVideosの表示状態はURLから一覧／新規／編集／キー管理へ
 
 既定と変更例の双方で通常文字4.5:1、大文字3:1、操作部品3:1、主操作44pxを確認する。変更例はテスト用素材・一時的な設定を使い、既定設定を戻してからcommitする。UI操作で作ったデータを消す必要がある場合も、専用テストDBであることを確認し、既存の稼働DBには触れない。
 
-- [ ] **Step 8: 運用文書と全検証を仕上げる。**
+- [x] **Step 8: 運用文書と全検証を仕上げる。**
+
+2026-09-08、運用文書、公開素材ディレクトリの注意書き、README導線を追加し、`pnpm verify`と`git diff --check`を完走した。ビルド成果物を別loopbackポートで配信し、`/`、`/admin/login`、`/index.html`、未知経路のframe拒否ヘッダーも確認した。Step 7の未検証項目はこの完了に含めない。
 
 ui-theming.mdへ実際に存在する変数一覧、編集箇所、ビルド、ロゴのサイズ比を維持する方法、キャッシュ更新、元設定への復元を記録する。public/brand/README.mdは公開素材だけを置く旨と未設定時fallbackを明記。READMEからリンクし、Issue #24・実装PR・本計画を相互リンクする。
 

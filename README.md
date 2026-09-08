@@ -4,7 +4,7 @@ play-cmsは、Filmaと連携する小規模な動画CMSとして公開リポジ�
 
 ## 現在の状態
 
-基盤を開発中です。公開運用に必要な認証、Filma連携、動画管理、視聴権管理は未実装です。
+localhost限定の管理者認証、未検証下書き、閲覧用キー管理を試作中です。公開・再生・実Filma連携・視聴権管理は無効です。
 
 ## ライセンス
 
@@ -22,8 +22,9 @@ pnpm verify
 
 ## 文書
 
-- [テーマ差し替え・管理者／視聴者UI仕様（承認済み・未実装）](docs/superpowers/specs/2026-09-08-ui-theme-navigation-design.md)
+- [テーマ差し替え・管理者／視聴者UI仕様（管理UI実装済み・ブラウザ受入一部未完了）](docs/superpowers/specs/2026-09-08-ui-theme-navigation-design.md)
 - [最小テーマと管理UIの実装計画](docs/superpowers/plans/2026-09-08-admin-ui-theme-implementation.md)
+- [管理画面のテーマ差し替え手順](docs/development/ui-theming.md)
 - [基盤設計](docs/superpowers/specs/2026-09-03-foundation-design.md)
 - [実装計画](docs/superpowers/plans/2026-09-03-foundation-implementation.md)
 - [Filma実API契約テスト](docs/development/filma-live-api-testing.md)
