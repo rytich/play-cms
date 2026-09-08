@@ -1,15 +1,16 @@
 # テーマ差し替えと管理者・視聴者UI仕様案
 
-- 状態: **提案・ユーザー承認待ち。UI未実装**
+- 状態: **仕様承認済み（2026-09-08）。UI未実装**
 - 作成・調査日: 2026-09-08
 - Tracking: [Issue #22](https://github.com/rytich/play-cms/issues/22)
 - 文書PR: [Draft PR #23](https://github.com/rytich/play-cms/pull/23)
+- 実装計画: [最小テーマと管理UI](../plans/2026-09-08-admin-ui-theme-implementation.md) / [Issue #24](https://github.com/rytich/play-cms/issues/24)
 - 対象: React/Viteによるplay-cmsの外観と画面導線。CMS本体の採用変更ではない。
 - 正本: [基盤設計](2026-09-03-foundation-design.md)、[ADR 0001](../../decisions/0001-use-lightweight-portable-architecture.md)、[セキュリティ方針](../../../SECURITY.md)
 - 先行仕様: [P0設計（参照時の固定コミット）](https://github.com/rytich/play-cms/blob/69408ac76bd5e0fff5a20005be6b2e36082a3397/docs/superpowers/specs/2026-09-07-p0-prototype-design.md)、[管理機能先行の承認追補](https://github.com/rytich/play-cms/blob/69408ac76bd5e0fff5a20005be6b2e36082a3397/docs/development/admin-first-prototype.md)
 - 関連: [PR #20](https://github.com/rytich/play-cms/pull/20)、[再生契約 Issue #16](https://github.com/rytich/play-cms/issues/16)
 
-本書は外観改善の提案であり、承認済みP0の権限・期限・公開条件を変更しない。P0の「大きなデザインシステムを作らない」を維持し、少数のCSS変数と共通画面枠だけを追加する。実装着手は本書へのユーザー承認後。文書PRの承認とUI実装の承認は区別する。
+2026-09-08、ユーザーの「OKです」により本仕様と最小実装計画の作成が承認された。承認済みP0の権限・期限・公開条件は変更しない。P0の「大きなデザインシステムを作らない」を維持し、少数のCSS変数と共通画面枠だけを追加する。計画提示後にコード実装開始を確認する。ユーザーの仕様承認、文書PRの正式承認、UI実装完了は別の状態として扱う。
 
 ## 1. 調査と設計判断
 
@@ -186,4 +187,4 @@ Filma再生契約・公開ゲートの解消後、セクション5〜6の画面�
 
 ## 9. 今回の成果物と未確認事項
 
-今回変更するのは本仕様案とREADMEの導線だけ。実装計画はユーザー承認後に作る。文書の整合性と既存検証の結果はIssue #22とその文書PRに記録する。未確認は、実際のブランド素材、利用者による配置評価、Filmaプレイヤーのアクセシビリティ、テーマ変更後の各配布環境のビルド・無料枠適合。本書でこれらの完了を主張しない。
+設計成果物は本仕様、最小実装計画、READMEの導線。文書の整合性と既存検証の結果はIssue #22とその文書PRに記録し、製品実装はIssue #24で追跡する。未確認は、実際のブランド素材、利用者による配置評価、Filmaプレイヤーのアクセシビリティ、テーマ変更後の各配布環境のビルド・無料枠適合。本書でこれらの完了を主張しない。
