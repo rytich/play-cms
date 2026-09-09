@@ -22,6 +22,8 @@ pnpm verify
 
 ## 文書
 
+- [現行要件とP0招待テストの完了条件](docs/product/requirements.md)
+- [P0招待テスト完了計画](docs/superpowers/plans/2026-09-09-p0-invite-test-completion.md)
 - [一覧絞り込み・一括状態変更の操作とmigration](docs/development/bulk-management.md)
 - [視聴者認証と視聴権ライブラリ](docs/development/viewer-auth-library.md)
 - [視聴者認証・ライブラリ実装計画](docs/superpowers/plans/2026-09-09-viewer-auth-library-implementation.md)
@@ -38,5 +40,7 @@ pnpm verify
 
 ## 開発状況
 
-- [Task 1: 開発基盤とリポジトリ運用](https://github.com/rytich/play-cms/issues/1)
-- [Issue #6: Filma実API契約テスト](https://github.com/rytich/play-cms/issues/6)
+- [Issue #34: 現行要件の集約](https://github.com/rytich/play-cms/issues/34)
+- [Issue #35: 使い切りキー・匿名視聴・視聴権引き継ぎ](https://github.com/rytich/play-cms/issues/35)
+- [Issue #36: D1 migrationとCloudflare招待環境](https://github.com/rytich/play-cms/issues/36)
+- [Issue #37: 3〜5名の招待操作確認](https://github.com/rytich/play-cms/issues/37)
