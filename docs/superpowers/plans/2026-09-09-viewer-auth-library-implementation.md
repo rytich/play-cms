@@ -12,7 +12,7 @@
 
 ## Global Constraints
 
-- Trackingは[GitHub Issue #32](https://github.com/rytich/play-cms/issues/32)、baseは`develop`、feature branchは`1a-m4/issue-32-viewer-auth-library`とする。
+- Trackingは[GitHub Issue #32](https://github.com/rytich/play-cms/issues/32)・[PR #33](https://github.com/rytich/play-cms/pull/33)、baseは`develop`、feature branchは`1a-m4/issue-32-viewer-auth-library`とする。
 - 実装・テスト・migration・設定変更は既存の5.6 Sol実装担当一名に集約し、別の5.6系担当が独立レビューする。正式なApprove/Mergeは`knryt`だけが行う。
 - 新しい依存関係、開発ツール、CI変更、追加のセキュリティ基盤を導入しない。既存のパスワードハッシュ、Cookie、JSON上限、同一Origin、D1レート制限を再利用する。
 - Filma API、動画再生、コード消費、匿名30分session、視聴権引き継ぎ、実D1 migration、deployを実行・実装しない。これらはIssue #16と後続のコード消費PRに残す。
