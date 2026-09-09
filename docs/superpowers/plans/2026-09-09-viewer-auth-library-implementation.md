@@ -47,7 +47,7 @@
 - Modify: `docs/development/issue-status.md`
 - Modify: `docs/superpowers/plans/2026-09-07-p0-prototype-implementation.md`
 
-- [ ] **Step 1: API・migration・URL契約の失敗testを書く**
+- [x] **Step 1: API・migration・URL契約の失敗testを書く**
 
   次を先にtestで固定し、対象testが期待どおりREDになることを確認する。
 
@@ -60,23 +60,23 @@
   - 登録はclientごとに1時間3回、loginは既存のclient/account制限を再利用する。状態変更はJSONのみ、16 KiB上限、余分なfield拒否、同一Origin必須とする。
   - `/register`、`/login`、`/library`が直接表示でき、route helperが各URLを一意に識別する。
 
-- [ ] **Step 2: schemaを最小変更する**
+- [x] **Step 2: schemaを最小変更する**
 
   `0003` migrationで、子tableの退避・再作成を含む既存のD1 migration patternに合わせて`accounts.role`のCHECKを`admin`と`viewer`へ拡張する。既存admin、session、`one_admin`制約、email一意制約を保持し、`entitlements`を追加する。migration testは旧schemaからの適用と既存データ保持を合成DBで確認する。実D1には適用しない。
 
-- [ ] **Step 3: viewer repositoryとAPIを実装する**
+- [x] **Step 3: viewer repositoryとAPIを実装する**
 
   既存auth helperを再利用し、viewer登録・検索・session認可・library queryを追加する。library queryはD1側で公開状態と期間を絞り、response境界でも同じavailabilityを再確認する。重複emailや認証失敗は秘密情報を含まない汎用応答にし、パスワード・Cookie・hashをログやresponseへ含めない。
 
   管理者の`POST /api/auth/login`と既存管理画面の挙動は変更しない。視聴者用は`POST /api/viewer/register`、`POST /api/viewer/login`、`GET /api/viewer/session`、`GET /api/viewer/library`へ分離する。
 
-- [ ] **Step 4: viewer UIを実装する**
+- [x] **Step 4: viewer UIを実装する**
 
   `src/admin/main.tsx`のentry pointでpathnameによりviewer appと既存admin appを振り分け、viewer実装は`src/viewer/`へ分離する。登録成功後は`/library`へ遷移し、logout後と未認証libraryは`/login`へ遷移する。login成功後も`/library`へ遷移する。
 
   libraryはタイトルと期限だけを主要表示し、動画がない場合は「現在視聴できる動画はありません」と表示する。画面遷移はHistory APIまたは通常navigationを使い、browser storageへ認証情報を保存しない。
 
-- [ ] **Step 5: 合成D1とブラウザで受入確認する**
+- [x] **Step 5: 合成D1とブラウザで受入確認する**
 
   合成D1へviewer、権利、公開中動画、draft、公開前、期限切れ動画を投入し、以下を確認する。
 
@@ -89,7 +89,7 @@
 
   実Filma API、動画再生、実D1、既存preview portは使用しない。
 
-- [ ] **Step 6: 文書と全検証を完了する**
+- [x] **Step 6: 文書と全検証を完了する**
 
   `docs/development/viewer-auth-library.md`へ今回のURL/API、合成データでの確認方法、非対象、後続のコード消費PRが唯一のentitlement作成経路になることを記載する。READMEとIssue statusからIssue #32、計画、検証方法へリンクし、元P0計画Task 5へ段階実装の注記を追加する。
 
@@ -103,7 +103,7 @@
   git diff --check origin/develop...HEAD
   ```
 
-- [ ] **Step 7: commitしてcontrollerへ報告する**
+- [x] **Step 7: commitしてcontrollerへ報告する**
 
   実装担当は秘密情報と`.dev.vars`がdiffへ入っていないことを確認し、すべてを次のmessageでcommitする。pushとPR作成はcontrollerが独立レビュー後に行う。
 

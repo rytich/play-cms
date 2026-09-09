@@ -4,15 +4,15 @@
 
 ## 進める順序
 
-| 区分             | Issue                                                                                      | 現状・次の条件                                                                                                                              |
-| ---------------- | ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| 実装中           | [#32 視聴者登録・ログイン・視聴権ライブラリ](https://github.com/rytich/play-cms/issues/32) | [実装計画](../superpowers/plans/2026-09-09-viewer-auth-library-implementation.md)に沿って、コード消費・再生より前のviewer基盤を最小実装する |
-| 再生前必須       | [#16 Filma再生契約](https://github.com/rytich/play-cms/issues/16)                          | 調査文書は統合済みだがNO-GO。ドメイン制約・絶対期限・実再生確認が残る                                                                       |
-| 公開前必須       | [#30 追加ブラウザ受入](https://github.com/rytich/play-cms/issues/30)                       | 実BFCache復帰・実200%拡大は未確認。#28の新画面も確認対象に含める                                                                            |
-| レビュー運用確認 | [#5 Webhook疎通](https://github.com/rytich/play-cms/issues/5)                              | 登録/Ping確認済み。実deliveryとの相関・受信側検証・重複拒否の証拠を残す                                                                     |
-| レビュー運用確認 | [#12 自動Mergeの安全停止](https://github.com/rytich/play-cms/issues/12)                    | 文書は統合済み。外部実行環境の停止/再開と、レビュー判定に対応する操作の整合を確認する                                                       |
-| 保護運用確認     | [#14 develop ruleset](https://github.com/rytich/play-cms/issues/14)                        | active・bypassなし・承認/CI/最新化必須は再取得済み。条件不足時の拒否証拠を残す                                                              |
-| 後続保守         | [#31 checkout実行基盤の警告](https://github.com/rytich/play-cms/issues/31)                 | プロトタイプ開発を優先して保留。製品機能とは別の専用PRで公式互換性確認とSHA固定の更新を行う                                                 |
+| 区分             | Issue                                                                                      | 現状・次の条件                                                                                               |
+| ---------------- | ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------ |
+| 実装中           | [#32 視聴者登録・ログイン・視聴権ライブラリ](https://github.com/rytich/play-cms/issues/32) | コード消費・再生より前のviewer基盤を[合成データで検証](viewer-auth-library.md)。独立レビュー・PR統合は未完了 |
+| 再生前必須       | [#16 Filma再生契約](https://github.com/rytich/play-cms/issues/16)                          | 調査文書は統合済みだがNO-GO。ドメイン制約・絶対期限・実再生確認が残る                                        |
+| 公開前必須       | [#30 追加ブラウザ受入](https://github.com/rytich/play-cms/issues/30)                       | 実BFCache復帰・実200%拡大は未確認。#28の新画面も確認対象に含める                                             |
+| レビュー運用確認 | [#5 Webhook疎通](https://github.com/rytich/play-cms/issues/5)                              | 登録/Ping確認済み。実deliveryとの相関・受信側検証・重複拒否の証拠を残す                                      |
+| レビュー運用確認 | [#12 自動Mergeの安全停止](https://github.com/rytich/play-cms/issues/12)                    | 文書は統合済み。外部実行環境の停止/再開と、レビュー判定に対応する操作の整合を確認する                        |
+| 保護運用確認     | [#14 develop ruleset](https://github.com/rytich/play-cms/issues/14)                        | active・bypassなし・承認/CI/最新化必須は再取得済み。条件不足時の拒否証拠を残す                               |
+| 後続保守         | [#31 checkout実行基盤の警告](https://github.com/rytich/play-cms/issues/31)                 | プロトタイプ開発を優先して保留。製品機能とは別の専用PRで公式互換性確認とSHA固定の更新を行う                  |
 
 ## 今回終了したIssue
 
@@ -35,4 +35,4 @@
 - 6 Astraは設計・管理、実装は既存5.6 Sol一体。独立レビューは別5.6系、正式Approve/Mergeはknryt。
 - #16・#30と既存の公開ゲートが未完了の間は実配信・外部公開を停止する。管理上の公開設定保存とは区別する。
 
-関連: [視聴者認証・ライブラリ計画](../superpowers/plans/2026-09-09-viewer-auth-library-implementation.md)、[開発手順](workflow.md)、[管理先行と公開ゲート](admin-first-prototype.md)。
+関連: [視聴者認証・ライブラリの確認手順](viewer-auth-library.md)、[視聴者認証・ライブラリ計画](../superpowers/plans/2026-09-09-viewer-auth-library-implementation.md)、[開発手順](workflow.md)、[管理先行と公開ゲート](admin-first-prototype.md)。
