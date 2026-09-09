@@ -187,6 +187,7 @@ export function ViewerApp() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [logoutState, setLogoutState] = useState<ViewerLogoutState>('idle')
+  const [explicitAuthentication, setExplicitAuthentication] = useState(false)
 
   const navigate = useCallback((path: string, replace = false) => {
     window.history[replace ? 'replaceState' : 'pushState'](null, '', path)
@@ -195,19 +196,30 @@ export function ViewerApp() {
 
   useEffect(() => {
     const restoreRoute = () => {
-      setRoute(
-        parseViewerRoute(window.location.pathname, window.location.search),
+      const restoredRoute = parseViewerRoute(
+        window.location.pathname,
+        window.location.search,
       )
+      if (
+        logoutState === 'failed' &&
+        (restoredRoute.kind === 'register' || restoredRoute.kind === 'login')
+      ) {
+        setLogoutState('idle')
+        setVideos([])
+        setAuthenticated(false)
+        setExplicitAuthentication(true)
+      }
+      setRoute(restoredRoute)
       setError('')
     }
     window.addEventListener('popstate', restoreRoute)
     return () => window.removeEventListener('popstate', restoreRoute)
-  }, [])
+  }, [logoutState])
 
   useEffect(() => {
-    if (logoutState !== 'idle') return
+    if (logoutState === 'pending' || explicitAuthentication) return
     let active = true
-    setAuthenticated(null)
+    if (logoutState !== 'failed') setAuthenticated(null)
     void viewerRequest<{ authenticated: true }>('/api/viewer/session')
       .then(() => {
         if (active) setAuthenticated(true)
@@ -227,10 +239,10 @@ export function ViewerApp() {
     return () => {
       active = false
     }
-  }, [logoutState, route])
+  }, [explicitAuthentication, logoutState, route])
 
   useEffect(() => {
-    if (logoutState !== 'idle') return
+    if (logoutState === 'pending' || explicitAuthentication) return
     if (authenticated === false && route.kind === 'library') {
       setVideos([])
       navigate(viewerRouteUrl('login'), true)
@@ -242,17 +254,18 @@ export function ViewerApp() {
     ) {
       navigate(viewerRouteUrl('library'), true)
     }
-  }, [authenticated, logoutState, navigate, route.kind])
+  }, [authenticated, explicitAuthentication, logoutState, navigate, route.kind])
 
   useEffect(() => {
     if (
-      logoutState !== 'idle' ||
+      logoutState === 'pending' ||
+      explicitAuthentication ||
       authenticated !== true ||
       route.kind !== 'library'
     )
       return
     let active = true
-    setError('')
+    if (logoutState !== 'failed') setError('')
     void viewerRequest<{ videos: ViewerLibraryItem[] }>('/api/viewer/library')
       .then((result) => {
         if (active) setVideos(result.videos)
@@ -273,7 +286,7 @@ export function ViewerApp() {
     return () => {
       active = false
     }
-  }, [authenticated, logoutState, navigate, route.kind])
+  }, [authenticated, explicitAuthentication, logoutState, navigate, route.kind])
 
   async function authenticate(
     mode: 'register' | 'login',
@@ -289,6 +302,9 @@ export function ViewerApp() {
       return
     }
     setBusy(true)
+    setVideos([])
+    setLogoutState('idle')
+    setExplicitAuthentication(true)
     setError('')
     try {
       await viewerRequest(
@@ -298,6 +314,7 @@ export function ViewerApp() {
       )
       setAuthenticated(true)
       navigate(viewerRouteUrl('library'))
+      setExplicitAuthentication(false)
     } catch (caught) {
       setError(visibleError(caught))
     } finally {

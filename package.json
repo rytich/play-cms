@@ -15,6 +15,7 @@
     "format:check": "prettier --check .",
     "lint": "eslint .",
     "test": "vitest run",
+    "test:browser:viewer-logout": "PLAY_VERIFY_BUILD=true vite build && node tests/browser/viewer-logout-account-switch.mjs",
     "test:worker": "vitest run --config vitest.worker.config.ts",
     "db:migrate:local": "wrangler d1 migrations apply play-cms-local --local",
     "test:filma:live": "node --env-file-if-exists=.dev.vars ./node_modules/vitest/vitest.mjs run --config vitest.live.config.ts",
