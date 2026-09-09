@@ -20,6 +20,7 @@ import { brand, isBrandAssetPath } from '../ui/brand'
 import { AdminLayout } from '../ui/layouts/AdminLayout'
 import { AuthLayout } from '../ui/layouts/AuthLayout'
 import { shouldHandleSameDocumentLink } from '../ui/navigation'
+import { ViewerApp } from '../viewer/App'
 import '../ui/base.css'
 import {
   AdminRequestError,
@@ -1489,8 +1490,10 @@ if (!(root instanceof HTMLElement)) {
   throw new Error('Admin root element was not found')
 }
 
+const viewerEntry = ['/register', '/login', '/library'].includes(
+  window.location.pathname,
+)
+
 createRoot(root).render(
-  <StrictMode>
-    <App />
-  </StrictMode>,
+  <StrictMode>{viewerEntry ? <ViewerApp /> : <App />}</StrictMode>,
 )

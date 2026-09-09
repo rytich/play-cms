@@ -9,7 +9,6 @@ import {
   createSession,
   deleteSession,
   findAdminByEmail,
-  findAdminSession,
   findVideo,
   insertAccessCode,
   insertVideo,
@@ -18,6 +17,12 @@ import {
   revokeAccessCode,
   updateVideo,
 } from '../adapters/database/admin-repository'
+import {
+  createViewerWithSession,
+  findSessionAccount,
+  findViewerByEmail,
+  listViewerLibraryRows,
+} from '../adapters/database/viewer-repository'
 import {
   constantTimeSecretEqual,
   generateAccessCode,
@@ -35,6 +40,11 @@ import {
   validLoginPassword,
   validNewPassword,
 } from '../core/admin'
+import {
+  availableLibraryItems,
+  parseViewerLogin,
+  parseViewerRegistration,
+} from '../core/viewer'
 import {
   parseBulkCodeInput,
   parseBulkVideoInput,
@@ -108,22 +118,30 @@ async function rateLimited(
   return c.json(errorBody.rateLimited, 429)
 }
 
-async function adminAccountId(c: AppContext) {
+async function accountSession(c: AppContext) {
   const hash = await sessionHash(c.req.raw)
   if (!hash) return null
-  const session = await findAdminSession(
+  return findSessionAccount(
     c.env.DATABASE,
     hash,
     Math.floor(Date.now() / 1_000),
   )
-  return session?.account_id ?? null
 }
 
-async function requireAdmin(c: AppContext) {
-  const accountId = await adminAccountId(c)
-  return accountId
-    ? { accountId }
-    : { response: c.json(errorBody.unauthorized, 401) }
+async function requireRole(c: AppContext, role: 'admin' | 'viewer') {
+  const session = await accountSession(c)
+  if (!session) return { response: c.json(errorBody.unauthorized, 401) }
+  return session.role === role
+    ? { accountId: session.account_id }
+    : { response: c.json(errorBody.forbidden, 403) }
+}
+
+function requireAdmin(c: AppContext) {
+  return requireRole(c, 'admin')
+}
+
+function requireViewer(c: AppContext) {
+  return requireRole(c, 'viewer')
 }
 
 async function limitAdminWrite(c: AppContext, accountId: string) {
@@ -215,6 +233,85 @@ app.post('/api/admin/setup', async (c) => {
   }
 })
 
+app.post('/api/viewer/register', async (c) => {
+  const body = await writeBody(c)
+  if ('response' in body) return body.response
+  const input = parseViewerRegistration(body.value)
+  if (!input) return c.json(errorBody.invalid, 400)
+
+  const limited = await rateLimited(c, [
+    {
+      endpoint: 'viewer-register',
+      rawBucket: 'client:local',
+      windowSeconds: 3_600,
+      maximum: 3,
+    },
+  ])
+  if (limited) return limited
+
+  const token = randomHex(32)
+  const now = Math.floor(Date.now() / 1_000)
+  const created = await createViewerWithSession(c.env.DATABASE, {
+    accountId: crypto.randomUUID(),
+    email: input.email,
+    passwordHash: await hashPassword(input.password),
+    sessionId: crypto.randomUUID(),
+    tokenHash: await sha256Hex(token),
+    expiresAt: now + 28_800,
+    now,
+  })
+  if (!created) return c.json(errorBody.conflict, 409)
+  c.header(
+    'Set-Cookie',
+    `play_session=${token}; Max-Age=28800; Path=/; HttpOnly; Secure; SameSite=Lax`,
+  )
+  return c.json({ authenticated: true }, 201)
+})
+
+app.post('/api/viewer/login', async (c) => {
+  const body = await writeBody(c)
+  if ('response' in body) return body.response
+  const input = parseViewerLogin(body.value)
+  if (!input) return c.json(errorBody.invalid, 400)
+
+  const limited = await rateLimited(c, [
+    {
+      endpoint: 'login-client',
+      rawBucket: 'client:local',
+      windowSeconds: 900,
+      maximum: 10,
+    },
+    {
+      endpoint: 'login-account',
+      rawBucket: `account:${input.email}`,
+      windowSeconds: 900,
+      maximum: 5,
+    },
+  ])
+  if (limited) return limited
+
+  const account = await findViewerByEmail(c.env.DATABASE, input.email)
+  const valid = await verifyPassword(input.password, account?.password_hash)
+  if (!account || !valid) {
+    return c.json({ error: 'invalid_credentials' } as const, 401)
+  }
+
+  const token = randomHex(32)
+  const now = Math.floor(Date.now() / 1_000)
+  await createSession(c.env.DATABASE, {
+    id: crypto.randomUUID(),
+    tokenHash: await sha256Hex(token),
+    accountId: account.id,
+    expiresAt: now + 28_800,
+    now,
+  })
+  c.header(
+    'Set-Cookie',
+    `play_session=${token}; Max-Age=28800; Path=/; HttpOnly; Secure; SameSite=Lax`,
+  )
+  return c.json({ authenticated: true })
+})
+
 app.post('/api/auth/login', async (c) => {
   const body = await writeBody(c)
   if ('response' in body) return body.response
@@ -274,6 +371,24 @@ app.get('/api/admin/session', async (c) => {
   const auth = await requireAdmin(c)
   if ('response' in auth) return auth.response
   return c.json({ authenticated: true })
+})
+
+app.get('/api/viewer/session', async (c) => {
+  const auth = await requireViewer(c)
+  if ('response' in auth) return auth.response
+  return c.json({ authenticated: true })
+})
+
+app.get('/api/viewer/library', async (c) => {
+  const auth = await requireViewer(c)
+  if ('response' in auth) return auth.response
+  const now = Date.now()
+  const rows = await listViewerLibraryRows(
+    c.env.DATABASE,
+    auth.accountId,
+    new Date(now).toISOString(),
+  )
+  return c.json({ videos: availableLibraryItems(rows, now) })
 })
 
 app.post('/api/auth/logout', async (c) => {
