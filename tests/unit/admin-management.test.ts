@@ -61,6 +61,19 @@ describe('admin management input', () => {
     expect(
       parseVideoFilters(new URLSearchParams({ q: 'あ'.repeat(101) })),
     ).toBeNull()
+    expect(
+      parseVideoFilters(new URLSearchParams({ from: '2026-02-31T12:00:00Z' })),
+    ).toBeNull()
+    expect(
+      parseVideoFilters(
+        new URLSearchParams({ from: '2028-02-29T12:34:56.123Z' }),
+      )?.from,
+    ).toBe('2028-02-29T12:34:56.123Z')
+    expect(
+      parseVideoFilters(
+        new URLSearchParams({ from: '2028-02-29T21:34:56.123+09:00' }),
+      )?.from,
+    ).toBe('2028-02-29T12:34:56.123Z')
     expect(parseVideoFilters(new URLSearchParams('q=a&q=b'))).toBeNull()
     expect(parseVideoFilters(new URLSearchParams({ unknown: 'x' }))).toBeNull()
     expect(

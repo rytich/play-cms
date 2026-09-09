@@ -24,16 +24,7 @@ export function acceptIssuedCodeForSelection(
   issued: IssuedCode,
 ) {
   if (selectedVideoId !== requestedVideoId) return null
-  return {
-    issuedCode: issued.code,
-    metadata: {
-      id: issued.id,
-      createdAt: issued.createdAt,
-      revokedAt: null,
-      status: 'unused' as const,
-      enabled: true,
-    },
-  }
+  return { issuedCode: issued.code }
 }
 
 export class AdminRequestError extends Error {

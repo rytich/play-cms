@@ -39,6 +39,7 @@ import {
 } from './routes'
 import type { AdminRoute } from './routes'
 import {
+  bulkListResult,
   canLeaveEditor,
   isVideoFormDirty,
   revokeCodeConfirmation,
@@ -334,7 +335,8 @@ function VideosPage({
   onUnauthorized,
   filters,
 }: ProtectedPageProps & { filters: VideoFilters }) {
-  const { offset } = filters
+  const [activeFilters, setActiveFilters] = useState(filters)
+  const { offset } = activeFilters
   const [videos, setVideos] = useState<Video[]>([])
   const [hasMore, setHasMore] = useState(false)
   const [selected, setSelected] = useState<Set<string>>(new Set())
@@ -344,35 +346,40 @@ function VideosPage({
   const [busy, setBusy] = useState(false)
   const heading = usePageHeading('動画一覧')
 
-  const load = useCallback(async () => {
-    setLoading(true)
-    setError('')
-    try {
-      const params = videoFiltersParams(filters)
-      const result = await adminRequest<{ videos: Video[]; hasMore: boolean }>(
-        `/api/admin/videos?${params.toString()}`,
-      )
-      setVideos(result.videos)
-      setHasMore(result.hasMore)
-      return result.videos
-    } catch (caught) {
-      if (caught instanceof AdminRequestError && caught.status === 401) {
-        setVideos([])
-        setSelected(new Set())
-        onUnauthorized()
-      } else {
-        setError(visibleError(caught))
+  const load = useCallback(
+    async (requestedFilters: VideoFilters) => {
+      setLoading(true)
+      setError('')
+      try {
+        const params = videoFiltersParams(requestedFilters)
+        const result = await adminRequest<{
+          videos: Video[]
+          hasMore: boolean
+        }>(`/api/admin/videos?${params.toString()}`)
+        setVideos(result.videos)
+        setHasMore(result.hasMore)
+        return result.videos
+      } catch (caught) {
+        if (caught instanceof AdminRequestError && caught.status === 401) {
+          setVideos([])
+          setSelected(new Set())
+          onUnauthorized()
+        } else {
+          setError(visibleError(caught))
+        }
+        return null
+      } finally {
+        setLoading(false)
       }
-      return null
-    } finally {
-      setLoading(false)
-    }
-  }, [filters, onUnauthorized])
+    },
+    [onUnauthorized],
+  )
 
   useEffect(() => {
+    setActiveFilters(filters)
     setSelected(new Set())
-    void load()
-  }, [load])
+    void load(filters)
+  }, [filters, load])
 
   function toggle(id: string) {
     setSelected((current) => {
@@ -404,13 +411,21 @@ function VideosPage({
         status: published ? 'published' : 'draft',
       })
       setSelected(new Set())
-      setResultMessage(
-        `${result.changedCount}件を変更し、${result.unchangedCount}件は変更不要でした。`,
+      const refreshed = await load(activeFilters)
+      if (!refreshed) return
+      const outcome = bulkListResult(
+        result.changedCount,
+        result.unchangedCount,
+        offset,
+        refreshed.length,
       )
-      const refreshed = await load()
-      if (refreshed?.length === 0 && offset > 0) {
-        window.location.replace(adminVideosUrl({ ...filters, offset: 0 }))
+      if (outcome.returnedToFirst) {
+        const firstPageFilters = { ...activeFilters, offset: outcome.offset }
+        setActiveFilters(firstPageFilters)
+        window.history.replaceState(null, '', adminVideosUrl(firstPageFilters))
+        await load(firstPageFilters)
       }
+      setResultMessage(outcome.message)
     } catch (caught) {
       if (caught instanceof AdminRequestError && caught.status === 401) {
         setVideos([])
@@ -446,7 +461,7 @@ function VideosPage({
           </div>
           <a
             className="button-link"
-            href={adminVideosUrl(filters).replace(
+            href={adminVideosUrl(activeFilters).replace(
               '/admin/videos',
               '/admin/videos/new',
             )}
@@ -455,9 +470,14 @@ function VideosPage({
           </a>
         </div>
         <div className="card filter-card">
-          <VideoListFilters action="/admin/videos" filters={filters} />
+          <VideoListFilters action="/admin/videos" filters={activeFilters} />
         </div>
         <div className="card">
+          {resultMessage && (
+            <p className="success" role="status">
+              {resultMessage}
+            </p>
+          )}
           {loading ? (
             <p className="loading" role="status">
               動画を読み込んでいます…
@@ -502,11 +522,6 @@ function VideosPage({
                 busy={busy}
                 onTarget={(target) => void bulkStatus(target)}
               />
-              {resultMessage && (
-                <p className="success" role="status">
-                  {resultMessage}
-                </p>
-              )}
               {error && (
                 <div className="error" role="alert">
                   <p>{error}</p>
@@ -542,8 +557,10 @@ function VideosPage({
                         </div>
                       </dl>
                       <div className="row-actions">
-                        <a href={adminVideoEditUrl(video.id, filters)}>編集</a>
-                        <a href={adminVideoCodesUrl(video.id, filters)}>
+                        <a href={adminVideoEditUrl(video.id, activeFilters)}>
+                          編集
+                        </a>
+                        <a href={adminVideoCodesUrl(video.id, activeFilters)}>
                           閲覧用キー
                         </a>
                       </div>
@@ -562,7 +579,7 @@ function VideosPage({
               ) : (
                 <a
                   href={adminVideosUrl({
-                    ...filters,
+                    ...activeFilters,
                     offset: Math.max(0, offset - 100),
                   })}
                 >
@@ -575,7 +592,12 @@ function VideosPage({
                   次へ
                 </span>
               ) : (
-                <a href={adminVideosUrl({ ...filters, offset: offset + 100 })}>
+                <a
+                  href={adminVideosUrl({
+                    ...activeFilters,
+                    offset: offset + 100,
+                  })}
+                >
                   次へ
                 </a>
               )}
@@ -876,6 +898,7 @@ function VideoCodesPage({
     new URL(route.returnTo, window.location.origin).searchParams,
   ) ?? { q: '', status: null, from: null, to: null, offset: 0 }
   const { codeFilters } = route
+  const [activeCodeFilters, setActiveCodeFilters] = useState(codeFilters)
   const [video, setVideo] = useState<Video | null>(null)
   const [codes, setCodes] = useState<CodeMetadata[]>([])
   const [hasMore, setHasMore] = useState(false)
@@ -909,35 +932,41 @@ function VideoCodesPage({
     [clearProtectedState, onUnauthorized],
   )
 
-  const load = useCallback(async () => {
-    setLoading(true)
-    setError('')
-    try {
-      const [videoResult, codeResult] = await Promise.all([
-        adminRequest<{ video: Video }>(
-          `/api/admin/videos/${encodeURIComponent(route.videoId)}`,
-        ),
-        adminRequest<{ codes: CodeMetadata[]; hasMore: boolean }>(
-          `/api/admin/videos/${encodeURIComponent(route.videoId)}/codes?${codeFiltersParams(
-            codeFilters,
-            'offset',
-          ).toString()}`,
-        ),
-      ])
-      setVideo(videoResult.video)
-      setCodes(codeResult.codes)
-      setHasMore(codeResult.hasMore)
-    } catch (caught) {
-      handleError(caught)
-    } finally {
-      setLoading(false)
-    }
-  }, [codeFilters, handleError, route.videoId])
+  const load = useCallback(
+    async (requestedFilters: typeof codeFilters) => {
+      setLoading(true)
+      setError('')
+      try {
+        const [videoResult, codeResult] = await Promise.all([
+          adminRequest<{ video: Video }>(
+            `/api/admin/videos/${encodeURIComponent(route.videoId)}`,
+          ),
+          adminRequest<{ codes: CodeMetadata[]; hasMore: boolean }>(
+            `/api/admin/videos/${encodeURIComponent(route.videoId)}/codes?${codeFiltersParams(
+              requestedFilters,
+              'offset',
+            ).toString()}`,
+          ),
+        ])
+        setVideo(videoResult.video)
+        setCodes(codeResult.codes)
+        setHasMore(codeResult.hasMore)
+        return codeResult.codes
+      } catch (caught) {
+        handleError(caught)
+        return null
+      } finally {
+        setLoading(false)
+      }
+    },
+    [handleError, route.videoId],
+  )
 
   useEffect(() => {
+    setActiveCodeFilters(codeFilters)
     setSelected(new Set())
-    void load()
-  }, [load])
+    void load(codeFilters)
+  }, [codeFilters, load])
 
   useEffect(() => {
     const discard = () => {
@@ -975,7 +1004,7 @@ function VideoCodesPage({
       )
       if (!accepted) return
       setIssuedCode(accepted.issuedCode)
-      setCodes((current) => [accepted.metadata, ...current])
+      await load(activeCodeFilters)
     } catch (caught) {
       handleError(caught)
     } finally {
@@ -1009,7 +1038,7 @@ function VideoCodesPage({
         'POST',
         {},
       )
-      await load()
+      await load(activeCodeFilters)
     } catch (caught) {
       handleError(caught)
     } finally {
@@ -1041,10 +1070,32 @@ function VideoCodesPage({
         { ids: [...selected], enabled },
       )
       setSelected(new Set())
-      setResultMessage(
-        `${result.changedCount}件を変更し、${result.unchangedCount}件は変更不要でした。`,
+      const refreshed = await load(activeCodeFilters)
+      if (!refreshed) return
+      const outcome = bulkListResult(
+        result.changedCount,
+        result.unchangedCount,
+        activeCodeFilters.offset,
+        refreshed.length,
       )
-      await load()
+      if (outcome.returnedToFirst) {
+        const firstPageFilters = {
+          ...activeCodeFilters,
+          offset: outcome.offset,
+        }
+        setActiveCodeFilters(firstPageFilters)
+        window.history.replaceState(
+          null,
+          '',
+          adminVideoCodesUrl(
+            video?.id ?? route.videoId,
+            videoFilters,
+            firstPageFilters,
+          ),
+        )
+        await load(firstPageFilters)
+      }
+      setResultMessage(outcome.message)
     } catch (caught) {
       handleError(caught)
     } finally {
@@ -1099,7 +1150,7 @@ function VideoCodesPage({
               action={`/admin/videos/${encodeURIComponent(video.id)}/codes`}
               resetHref={adminVideoCodesUrl(video.id, videoFilters)}
               videoFilters={videoFilters}
-              filters={codeFilters}
+              filters={activeCodeFilters}
             />
           </div>
           <div className="card">
@@ -1151,7 +1202,7 @@ function VideoCodesPage({
                 <button
                   type="button"
                   className="secondary"
-                  onClick={() => void load()}
+                  onClick={() => void load(activeCodeFilters)}
                 >
                   状態を再取得
                 </button>
@@ -1242,28 +1293,28 @@ function VideoCodesPage({
               使用済みは引換機能未実装のため現在0件です。実引換・視聴権は未実装です。
             </p>
             <nav className="pager" aria-label="閲覧用キー一覧のページ送り">
-              {codeFilters.offset === 0 ? (
+              {activeCodeFilters.offset === 0 ? (
                 <span className="pager-disabled" aria-disabled="true">
                   前へ
                 </span>
               ) : (
                 <a
                   href={adminVideoCodesUrl(video.id, videoFilters, {
-                    ...codeFilters,
-                    offset: Math.max(0, codeFilters.offset - 100),
+                    ...activeCodeFilters,
+                    offset: Math.max(0, activeCodeFilters.offset - 100),
                   })}
                 >
                   前へ
                 </a>
               )}
               <span>
-                {videoListRangeLabel(codeFilters.offset, codes.length)}
+                {videoListRangeLabel(activeCodeFilters.offset, codes.length)}
               </span>
               {hasMore ? (
                 <a
                   href={adminVideoCodesUrl(video.id, videoFilters, {
-                    ...codeFilters,
-                    offset: codeFilters.offset + 100,
+                    ...activeCodeFilters,
+                    offset: activeCodeFilters.offset + 100,
                   })}
                 >
                   次へ

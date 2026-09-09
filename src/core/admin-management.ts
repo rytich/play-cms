@@ -73,13 +73,31 @@ export function parseBulkCodeInput(value: unknown): BulkCodeInput | null {
 
 function canonicalInstant(value: string | null): string | null | undefined {
   if (value === null || value === '') return null
-  if (
-    !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?(?:Z|[+-]\d{2}:\d{2})$/.test(
+  const match =
+    /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{1,3}))?)?(Z|[+-](\d{2}):(\d{2}))$/.exec(
       value,
     )
-  ) {
+  if (!match) return undefined
+  const [, year, month, day, hour, minute, second = '00', fraction = '0'] =
+    match
+  const calendar = new Date(0)
+  calendar.setUTCFullYear(Number(year), Number(month) - 1, Number(day))
+  calendar.setUTCHours(
+    Number(hour),
+    Number(minute),
+    Number(second),
+    Number(fraction.padEnd(3, '0')),
+  )
+  if (
+    calendar.getUTCFullYear() !== Number(year) ||
+    calendar.getUTCMonth() !== Number(month) - 1 ||
+    calendar.getUTCDate() !== Number(day) ||
+    calendar.getUTCHours() !== Number(hour) ||
+    calendar.getUTCMinutes() !== Number(minute) ||
+    calendar.getUTCSeconds() !== Number(second) ||
+    calendar.getUTCMilliseconds() !== Number(fraction.padEnd(3, '0'))
+  )
     return undefined
-  }
   const timestamp = Date.parse(value)
   return Number.isFinite(timestamp)
     ? new Date(timestamp).toISOString()

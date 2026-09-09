@@ -276,11 +276,11 @@ export async function listAccessCodes(
   if (filters.lifecycle === 'used') where.push('0 = 1')
   if (filters.issuedFrom) {
     where.push('created_at >= ?')
-    bindings.push(Math.floor(Date.parse(filters.issuedFrom) / 1_000))
+    bindings.push(Math.ceil(Date.parse(filters.issuedFrom) / 1_000))
   }
   if (filters.issuedTo) {
     where.push('created_at < ?')
-    bindings.push(Math.floor(Date.parse(filters.issuedTo) / 1_000))
+    bindings.push(Math.ceil(Date.parse(filters.issuedTo) / 1_000))
   }
   const rows = await db
     .prepare(

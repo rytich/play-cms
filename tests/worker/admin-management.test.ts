@@ -161,6 +161,15 @@ describe('admin management API', () => {
       '10000000-0000-4000-8000-000000000004',
       '10000000-0000-4000-8000-000000000002',
     ])
+    const subsecond = await api(
+      `/api/admin/videos/${uuid(1)}/codes?issuedFrom=1970-01-01T00%3A00%3A02.001Z&issuedTo=1970-01-01T00%3A00%3A03.001Z`,
+      { headers },
+    )
+    expect(
+      (await subsecond.json<{ codes: { id: string }[] }>()).codes.map(
+        (item) => item.id,
+      ),
+    ).toEqual(['10000000-0000-4000-8000-000000000003'])
     const used = await api(
       `/api/admin/videos/${uuid(1)}/codes?lifecycle=used`,
       { headers },

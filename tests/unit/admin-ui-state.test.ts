@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  bulkListResult,
   canLeaveEditor,
   isVideoFormDirty,
   selectionAfterContextChange,
@@ -69,5 +70,23 @@ describe('admin UI state', () => {
     expect(unknownOutcomeAdvice).toContain('自動再送せず')
     expect(unknownOutcomeAdvice).toContain('状態を再取得')
     expect(unknownOutcomeAdvice).not.toContain('変更されていません')
+  })
+
+  it('keeps success visible and returns an emptied later page to the first page', () => {
+    expect(bulkListResult(2, 0, 0)).toEqual({
+      offset: 0,
+      returnedToFirst: false,
+      message: '2件を変更し、0件は変更不要でした。',
+    })
+    expect(bulkListResult(1, 0, 100)).toEqual({
+      offset: 0,
+      returnedToFirst: true,
+      message:
+        '1件を変更し、0件は変更不要でした。対象ページが空になったため、先頭ページへ戻りました。',
+    })
+    expect(bulkListResult(1, 1, 100, 1)).toMatchObject({
+      offset: 100,
+      returnedToFirst: false,
+    })
   })
 })

@@ -57,6 +57,16 @@ describe('admin client', () => {
     expect(await pending).toBeNull()
   })
 
+  it('returns only the one-time key and leaves filtered list metadata to the server', () => {
+    expect(
+      acceptIssuedCodeForSelection('video-a', 'video-a', {
+        id: 'code-a',
+        code: 'AAAA-BBBB-CCCC-DDDD',
+        createdAt: '2026-09-08T00:00:00.000Z',
+      }),
+    ).toEqual({ issuedCode: 'AAAA-BBBB-CCCC-DDDD' })
+  })
+
   it('rejects impossible or missing form dates before sending a video', () => {
     expect(() => toIsoDateTime('')).toThrow()
     expect(() => toIsoDateTime('not-a-date')).toThrow()
