@@ -208,6 +208,11 @@ export function ViewerApp() {
         setVideos([])
         setAuthenticated(false)
         setExplicitAuthentication(true)
+      } else if (
+        restoredRoute.kind !== 'register' &&
+        restoredRoute.kind !== 'login'
+      ) {
+        setExplicitAuthentication(false)
       }
       setRoute(restoredRoute)
       setError('')

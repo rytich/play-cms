@@ -59,6 +59,7 @@ const page = await context.newPage()
 let viewer = null
 let logoutAttempts = 0
 let viewerBLibraryLoads = 0
+let viewerASessionLoads = 0
 let markPostFailureSessionStarted
 let releasePostFailureSession
 const postFailureSessionStarted = new Promise((resolve) => {
@@ -80,6 +81,7 @@ await context.route(`${base}/api/**`, async (route) => {
   const request = route.request()
   const pathname = new URL(request.url()).pathname
   if (pathname === '/api/viewer/session') {
+    if (viewer === 'A') viewerASessionLoads += 1
     if (logoutAttempts === 1 && viewer === 'A') {
       markPostFailureSessionStarted()
       await postFailureSessionHold
@@ -154,6 +156,21 @@ try {
   await page.goBack()
   await page.waitForURL(`${base}/login`)
   await page.getByRole('heading', { name: '視聴者ログイン' }).waitFor()
+  const viewerASessionsBeforeForward = viewerASessionLoads
+  await page.goForward()
+  await page.waitForURL(`${base}/library`)
+  await page.getByText('Viewer A library title').waitFor({ timeout: 2_000 })
+  if (viewerASessionLoads <= viewerASessionsBeforeForward) {
+    throw new Error('forward navigation did not revalidate viewer A session')
+  }
+
+  await page.getByRole('button', { name: 'ログアウト' }).click()
+  await page
+    .getByText('ログアウトできませんでした。もう一度お試しください。')
+    .waitFor()
+  await page.goBack()
+  await page.waitForURL(`${base}/login`)
+  await page.getByRole('heading', { name: '視聴者ログイン' }).waitFor()
   await page.getByLabel('メールアドレス').fill('viewer-b@example.test')
   await page.getByLabel('パスワード').fill('synthetic viewer password')
   await page.getByRole('button', { name: 'ログイン', exact: true }).click()
@@ -167,7 +184,7 @@ try {
   if (viewerBLibraryLoads < 1) {
     throw new Error(`viewer B library loads: ${viewerBLibraryLoads}`)
   }
-  if (logoutAttempts !== 1) {
+  if (logoutAttempts !== 2) {
     throw new Error(`logout attempts: ${logoutAttempts}`)
   }
   log('viewer logout account switch: pass')
