@@ -16,7 +16,7 @@
 - 6 Astraは設計と管理だけを担当する。製品・テスト・migration・設定の実装と修正は同じ5.6 Sol担当へ集約し、別の5.6系担当が独立レビューする。正式Approve/Mergeはknrytだけが行う。
 - 実装は失敗テストから開始し、各PRで`pnpm verify`、`git diff --check origin/develop...HEAD`、秘密値の非混入を確認する。
 - Filma APIキーをresponse、browser storage、URL、ログ、Issue、PRへ出さない。再生grantをD1、browser storage、ログへ保存しない。
-- #16のGO条件を満たすまで実Filma再生と閲覧キー消費を有効にしない。Filma障害、構成不備、grant契約違反ではキーを未使用のまま残して503で閉じる。
+- 一般公開は#16のGO条件を満たすまで実Filma再生と閲覧キー消費を有効にしない。P0招待試験だけは[ADR 0003](../../decisions/0003-allow-limited-p0-playback-without-domain-binding.md)に従い、専用の非機密動画一件、3〜5名、動画単位・5分以下、既定無効の条件で進める。Filma障害、構成不備、動画限定または期限の契約違反ではキーを未使用のまま残して503で閉じる。
 - 非公開・公開前・期限終了後は、全viewer routeでタイトル、説明、サムネイル、Filma ID、再生grant、存在を示す件数を返さない。
 - P0では動画アップロード、アクセス解析、DRM、サムネイル、メール確認、パスワード再設定、新しい管理基盤を追加しない。
 - Cloudflare操作の前に`wrangler whoami`と対象resourceを確認し、既存の同名Worker/D1を上書き・削除しない。remote migrationは専用テストD1だけへ適用する。
@@ -67,6 +67,7 @@
 - Produces: `issuePlaybackGrant(input): Promise<{url: string; expiresAt: string}>`。`input`は`apiKey`、`filmaFileId`、`notAfter`、`allowedOrigin`を持ち、固定Filma host、5秒、64 KiB、redirect拒否、単一試行を適用する。
 - Produces: `redeemForAnonymous(db, input)`と`redeemForViewer(db, input)`。code hash、video、時刻を同一transactionで再確認し、一つだけredemptionを作る。
 - Consumes: `findSessionAccount()`、`createViewerWithSession()`、`availableLibraryItems()`、既存の`play_session` Cookie。
+- Consumes: `PLAY_CMS_P0_INVITE_PLAYBACK`と`PLAY_CMS_P0_FILMA_FILE_ID`。前者は文字列`true`のときだけP0再生を許可し、後者と動画の`filmaFileId`が完全一致しない場合はgrant取得前に拒否する。未設定を既定とし、通常CIでは無効のままにする。
 
 - [ ] **Step 1: Filma再生契約専用のlive testでGO条件を確認する**
 
@@ -79,10 +80,10 @@
   結果は次の3種類に分け、statusと分類名だけを#16へ記録する。
 
   - `all-conditions-passed`: 有効期限、許可origin、拒否origin、期限後grant、期限後refreshの全条件を確認できた場合だけGO候補とする。
-  - `contract-denied`: Filmaへの到達と認証は成立したが、拒否originでも再生できる、または期限後のgrant/refreshが受理されるなど、必須security条件が満たされないことを実証できた場合。現行公式仕様ではJWTへdomain制限を適用しないため、これを期待されるNO-GO結果とし、production codeとキー消費へ進まない。
+  - `contract-denied`: Filmaへの到達と認証は成立したが、拒否originでも再生できる、または期限後のgrant/refreshが受理されるなど、一般公開のsecurity条件が満たされないことを実証できた場合。一般公開はNO-GOとする。P0は動画限定と5分以下の非null期限を確認できた場合だけ、ADR 0003の既定無効・専用動画allowlistの実装へ進める。
   - `test-infrastructure-error`: 変数不足、認証失敗、timeout、DNS、予期しないstatus/schemaなど、契約成立・不成立を判定できない場合。原因を調査するまで停止し、これを`contract-denied`またはGOとして扱わない。
 
-  P0招待試験だけdomain制限を緩和する場合も黙ってtestを削除せず、ユーザー承認、動画単位・5分以下のtoken、テスト動画限定、一般公開前に再度停止する条件をADRへ保存してから、計画と#16を更新する。
+  `test-infrastructure-error`、動画限定不明、期限不明、5分超過ではP0も停止する。domain制限とrefresh延長の残存リスクだけをADR 0003でP0限定受容し、testを削除したり`all-conditions-passed`へ読み替えたりしない。
 
 - [ ] **Step 2: migrationとcoreの失敗テストを書く**
 
@@ -96,9 +97,14 @@
 
   `src/admin/routes.ts`が`/admin/filma`を固有画面として認識し、`AdminLayout`の「Filma連携」から遷移でき、direct open・reload・back・forwardで復元できることをtestで固定する。画面は未設定、確認中、接続済み、接続失敗だけを示し、保存済みキーを再表示しない。
 
-  実装着手の前提として、確認済み公式仕様を固定した[Filma playback contract](../../development/filma-playback-contract.md#確認した契約)の「動画存在確認・再生情報取得」を根拠に、識別・検証APIが`GET /filmaapi/storage/{id}`、pathの`id`がファイルID、必要なresponse fieldが`url`と`mediafile_id`であることを確認する。固定した公式資料へ到達できない、実契約が資料と一致しない、または成功・不存在・権限エラーのstatusとschemaを安全に分類できない場合はStep 4を停止し、#16へ未確認事項を記録する。別endpointやfieldを推測せず、動画をD1へ保存しない。
+  実装着手の前提として、確認済み公式仕様を固定した[Filma playback contract](../../development/filma-playback-contract.md#確認した契約)の「動画存在確認・再生情報取得」とエラー仕様を根拠に、次の識別・受入規則をtestで固定する。
 
-  契約確認後の動画作成・更新は、暗号化済みキーを復号し、同APIが対象ファイルを返し、`mediafile_id`、公開状態、再生情報が契約を満たした場合だけD1へ保存する。認証、到達性、存在、契約の失敗時は動画を新規作成・更新せず、秘密を含まない503または入力対象を示さない404へ変換する。
+  - 管理者が送信した`filmaFileId`は`^[1-9]\d{0,19}$`の正規形だけを許可し、その文字列を`GET /filmaapi/storage/{id}`のpath `id`へ一度だけpercent-encodeして渡す。成功時もこの入力値だけを`videos.filma_file_id`へ保存する。
+  - responseの`mediafile_id`はエンコード済みファイルを示す別識別子であり、入力`filmaFileId`との一致を要求せず、入力値を上書きしない。正のsafe integerであることを検証し、そのresponse内のHTTPS `url`と再生grantの対象確認だけに使う。
+  - `show_all`は送らない。公式仕様上は公開ファイルだけが200となるため、文書にない`published` fieldを推測しない。200かつ64 KiB以下のJSON objectで、`url`が許可済みFilma hostのHTTPS URL、`mediafile_id`が上記条件を満たす場合だけschema成功候補とする。
+  - pinned error contractに従い、404は不存在として保存せず管理入力エラー、401/403は認証・権限設定エラーとして保存せず503、redirect・その他status・timeout・過大body・不正schemaは保存せず503へ閉じる。response bodyと識別子をログへ出さない。
+
+  専用テスト動画、専用組織で不存在と確認したテスト用ID、無効なテスト認証、拒否originを使うlive contract testで、200、404、401、403の実statusと200 schemaが上記分類に一致することを確認するまでproductionの動画作成・更新へ接続しない。固定した公式資料へ到達できない、実契約が資料と一致しない、またはstatus/schemaを安全に分類できない場合はStep 4を停止して#16へ未確認事項を記録する。別endpointやfieldを推測せず、動画をD1へ保存しない。
 
 - [ ] **Step 5: キー消費・管理表示・権利移行の失敗テストを書く**
 
@@ -108,7 +114,7 @@
 
 - [ ] **Step 6: 最小実装でテストを通す**
 
-  redeemは、ハッシュ一致候補とavailabilityを読み取り、Filma grantを取得・検証した後、D1 transactionで同じ条件を再確認して一件だけ消費する。匿名時は`play_anonymous`を`HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=1800`で発行する。viewer時は同じtransactionでentitlementをupsertする。register/login時は有効な匿名sessionだけを同じtransactionで移し、移行後に匿名sessionを失効させる。
+  redeemは、P0再生フラグと専用動画allowlist、ハッシュ一致候補、availabilityを読み取り、Filma grantを取得・検証した後、D1 transactionで同じ条件を再確認して一件だけ消費する。フラグ未設定・無効、allowlist不一致ではFilmaへ接続せずキーを未使用のまま503で閉じる。匿名時は`play_anonymous`を`HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=1800`で発行する。viewer時は同じtransactionでentitlementをupsertする。register/login時は有効な匿名sessionだけを同じtransactionで移し、移行後に匿名sessionを失効させる。
 
 - [ ] **Step 7: URL単位の管理・視聴UIを実装する**
 
@@ -237,4 +243,4 @@
 - 要件対応: 管理者、視聴者、キー、期限、URL、Filma秘密、D1、Cloudflare、3〜5名受入をTask 1〜3へ割り当てた。
 - 対象外対応: アップロード、解析、DRM、サムネイル、メール機能、一般公開をGlobal Constraintsで除外した。
 - 型整合: `publicId`、`filmaFileId`、`expiresAt`、`notAfter`は既存camelCase responseと一致させ、D1列だけsnake_caseとした。
-- 停止条件: #16 NO-GO、Filma failure、Cloudflare resource名衝突、Critical受入不具合で次工程へ進まない。
+- 停止条件: 一般公開の#16 NO-GOを維持し、P0でも動画限定・5分以下の期限を確認できない場合、Filma failure、Cloudflare resource名衝突、Critical受入不具合では次工程へ進まない。
