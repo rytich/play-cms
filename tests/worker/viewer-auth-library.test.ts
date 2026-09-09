@@ -220,6 +220,30 @@ describe('viewer authentication and library API', () => {
         ).bind(accountId, `video-${id}`, `code-${id}`),
       ])
     }
+    await env.DATABASE.batch([
+      env.DATABASE.prepare(
+        `INSERT INTO accounts (id, role, email, password_hash, created_at)
+         VALUES ('viewer-other', 'viewer', 'other-viewer@example.test', ?, 1)`,
+      ).bind(passwordHash),
+      env.DATABASE.prepare(
+        `INSERT INTO videos
+         (id, public_id, filma_file_id, title, description, status,
+          starts_at, ends_at, created_at, updated_at)
+         VALUES ('video-other', 'public-other', '99', 'Title other viewer',
+                 'Description other viewer', 'published',
+                 '2020-01-01T00:00:00.000Z', '2100-01-01T00:00:00.000Z', 1, 1)`,
+      ),
+      env.DATABASE.prepare(
+        `INSERT INTO access_codes
+         (id, video_id, code_hash, created_at, revoked_at, is_enabled)
+         VALUES ('code-other', 'video-other', 'hash-other', 1, NULL, 1)`,
+      ),
+      env.DATABASE.prepare(
+        `INSERT INTO entitlements
+         (account_id, video_id, source_code_id, granted_at)
+         VALUES ('viewer-other', 'video-other', 'code-other', 1)`,
+      ),
+    ])
 
     const response = await api('/api/viewer/library', {
       headers: { Cookie: cookie },

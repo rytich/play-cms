@@ -13,7 +13,11 @@ import {
   parseViewerLogin,
   parseViewerRegistration,
 } from '../../src/core/viewer'
-import { ViewerAuthForm, ViewerLibrary } from '../../src/viewer/App'
+import {
+  ViewerAuthForm,
+  ViewerLibrary,
+  performViewerLogout,
+} from '../../src/viewer/App'
 
 afterEach(() => vi.unstubAllGlobals())
 
@@ -59,6 +63,90 @@ describe('viewer client', () => {
     expect(list).toContain('2100')
     expect(list).not.toContain(item.description)
     expect(empty).toContain('現在視聴できる動画はありません')
+  })
+
+  it('keeps the authenticated library visible until a delayed logout settles', async () => {
+    let resolveLogout: (() => void) | undefined
+    const delayedLogout = new Promise<void>((resolve) => {
+      resolveLogout = resolve
+    })
+    const state = {
+      authenticated: true,
+      route: '/library',
+      phase: 'idle',
+      error: '',
+    }
+
+    const operation = performViewerLogout({
+      request: () => delayedLogout,
+      onStart: () => {
+        state.phase = 'pending'
+      },
+      onSuccess: () => {
+        state.authenticated = false
+        state.route = '/login'
+        state.phase = 'idle'
+      },
+      onFailure: (message) => {
+        state.phase = 'failed'
+        state.error = message
+      },
+    })
+
+    expect(state).toEqual({
+      authenticated: true,
+      route: '/library',
+      phase: 'pending',
+      error: '',
+    })
+    resolveLogout?.()
+    await operation
+    expect(state).toEqual({
+      authenticated: false,
+      route: '/login',
+      phase: 'idle',
+      error: '',
+    })
+  })
+
+  it('keeps library state and presents an explicit retry after logout failure', async () => {
+    const state = {
+      authenticated: true,
+      route: '/library',
+      phase: 'idle',
+      error: '',
+    }
+
+    await performViewerLogout({
+      request: () => Promise.reject(new Error('synthetic failure')),
+      onStart: () => {
+        state.phase = 'pending'
+      },
+      onSuccess: () => {
+        state.authenticated = false
+        state.route = '/login'
+        state.phase = 'idle'
+      },
+      onFailure: (message) => {
+        state.phase = 'failed'
+        state.error = message
+      },
+    })
+
+    expect(state.authenticated).toBe(true)
+    expect(state.route).toBe('/library')
+    expect(state.phase).toBe('failed')
+    expect(state.error).toBe(
+      'ログアウトできませんでした。もう一度お試しください。',
+    )
+    const retry = renderToStaticMarkup(
+      createElement(ViewerLibrary, {
+        videos: [],
+        logoutState: 'failed',
+        onLogout: () => {},
+      }),
+    )
+    expect(retry).toContain('ログアウトを再試行')
   })
 
   it('normalizes exact viewer credentials and keeps registration stronger than login', () => {

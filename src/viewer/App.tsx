@@ -104,9 +104,11 @@ export function ViewerAuthForm({
 
 export function ViewerLibrary({
   videos,
+  logoutState = 'idle',
   onLogout,
 }: {
   videos: readonly ViewerLibraryItem[]
+  logoutState?: ViewerLogoutState
   onLogout: () => void
 }) {
   return (
@@ -119,8 +121,17 @@ export function ViewerLibrary({
             で表示します。
           </p>
         </div>
-        <button type="button" className="secondary" onClick={onLogout}>
-          ログアウト
+        <button
+          type="button"
+          className="secondary"
+          disabled={logoutState === 'pending'}
+          onClick={onLogout}
+        >
+          {logoutState === 'pending'
+            ? 'ログアウト中…'
+            : logoutState === 'failed'
+              ? 'ログアウトを再試行'
+              : 'ログアウト'}
         </button>
       </div>
       <div className="card">
@@ -149,6 +160,24 @@ function visibleError(error: unknown) {
     : '現在処理できません。時間をおいてもう一度お試しください。'
 }
 
+export type ViewerLogoutState = 'idle' | 'pending' | 'failed'
+
+export async function performViewerLogout(input: {
+  request: () => Promise<unknown>
+  onStart: () => void
+  onSuccess: () => void
+  onFailure: (message: string) => void
+}) {
+  input.onStart()
+  try {
+    await input.request()
+  } catch {
+    input.onFailure('ログアウトできませんでした。もう一度お試しください。')
+    return
+  }
+  input.onSuccess()
+}
+
 export function ViewerApp() {
   const [route, setRoute] = useState(() =>
     parseViewerRoute(window.location.pathname, window.location.search),
@@ -157,6 +186,7 @@ export function ViewerApp() {
   const [videos, setVideos] = useState<ViewerLibraryItem[]>([])
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const [logoutState, setLogoutState] = useState<ViewerLogoutState>('idle')
 
   const navigate = useCallback((path: string, replace = false) => {
     window.history[replace ? 'replaceState' : 'pushState'](null, '', path)
@@ -175,6 +205,7 @@ export function ViewerApp() {
   }, [])
 
   useEffect(() => {
+    if (logoutState !== 'idle') return
     let active = true
     setAuthenticated(null)
     void viewerRequest<{ authenticated: true }>('/api/viewer/session')
@@ -196,9 +227,10 @@ export function ViewerApp() {
     return () => {
       active = false
     }
-  }, [route])
+  }, [logoutState, route])
 
   useEffect(() => {
+    if (logoutState !== 'idle') return
     if (authenticated === false && route.kind === 'library') {
       setVideos([])
       navigate(viewerRouteUrl('login'), true)
@@ -210,10 +242,15 @@ export function ViewerApp() {
     ) {
       navigate(viewerRouteUrl('library'), true)
     }
-  }, [authenticated, navigate, route.kind])
+  }, [authenticated, logoutState, navigate, route.kind])
 
   useEffect(() => {
-    if (authenticated !== true || route.kind !== 'library') return
+    if (
+      logoutState !== 'idle' ||
+      authenticated !== true ||
+      route.kind !== 'library'
+    )
+      return
     let active = true
     setError('')
     void viewerRequest<{ videos: ViewerLibraryItem[] }>('/api/viewer/library')
@@ -236,7 +273,7 @@ export function ViewerApp() {
     return () => {
       active = false
     }
-  }, [authenticated, navigate, route.kind])
+  }, [authenticated, logoutState, navigate, route.kind])
 
   async function authenticate(
     mode: 'register' | 'login',
@@ -269,14 +306,24 @@ export function ViewerApp() {
   }
 
   async function logout() {
-    setVideos([])
-    setAuthenticated(false)
-    try {
-      await viewerRequest('/api/auth/logout', 'POST', {})
-    } catch {
-      // Protected state is already removed. Do not retry an uncertain mutation.
-    }
-    navigate(viewerRouteUrl('login'), true)
+    if (logoutState === 'pending') return
+    await performViewerLogout({
+      request: () => viewerRequest('/api/auth/logout', 'POST', {}),
+      onStart: () => {
+        setLogoutState('pending')
+        setError('')
+      },
+      onSuccess: () => {
+        setVideos([])
+        setAuthenticated(false)
+        navigate(viewerRouteUrl('login'), true)
+        setLogoutState('idle')
+      },
+      onFailure: (message) => {
+        setLogoutState('failed')
+        setError(message)
+      },
+    })
   }
 
   if (route.kind === 'not-found') {
@@ -318,7 +365,11 @@ export function ViewerApp() {
           {error}
         </p>
       )}
-      <ViewerLibrary videos={videos} onLogout={() => void logout()} />
+      <ViewerLibrary
+        videos={videos}
+        logoutState={logoutState}
+        onLogout={() => void logout()}
+      />
     </ViewerLayout>
   )
 }
