@@ -31,8 +31,8 @@ function ViewerLayout({ children }: { children: ReactNode }) {
       </header>
       <main id="viewer-main" className="viewer-main">
         <aside className="notice" role="note">
-          <strong>再生は未実装</strong>
-          <span>現在の視聴権だけを確認できます。</span>
+          <strong>招待試験用</strong>
+          <span>再生は専用動画一件だけに制限され、既定で無効です。</span>
         </aside>
         {children}
       </main>
@@ -44,11 +44,13 @@ export function ViewerAuthForm({
   mode,
   busy,
   error,
+  returnTo,
   onSubmit,
 }: {
   mode: 'register' | 'login'
   busy: boolean
   error: string
+  returnTo?: string
   onSubmit: (credentials: { email: string; password: string }) => void
 }) {
   const registering = mode === 'register'
@@ -99,9 +101,13 @@ export function ViewerAuthForm({
       </form>
       <p className="subtle viewer-auth-link">
         {registering ? (
-          <a href={viewerRouteUrl('login')}>登録済みの方はログイン</a>
+          <a href={viewerRouteUrl('login', undefined, returnTo)}>
+            登録済みの方はログイン
+          </a>
         ) : (
-          <a href={viewerRouteUrl('register')}>初めての方は視聴者登録</a>
+          <a href={viewerRouteUrl('register', undefined, returnTo)}>
+            初めての方は視聴者登録
+          </a>
         )}
       </p>
     </section>
@@ -150,7 +156,11 @@ export function ViewerLibrary({
           <ul className="viewer-library-list">
             {videos.map((video) => (
               <li key={video.publicId}>
-                <strong>{video.title}</strong>
+                <strong>
+                  <a href={viewerRouteUrl('viewing', video.publicId)}>
+                    {video.title}
+                  </a>
+                </strong>
                 <span>
                   視聴期限: {new Date(video.endsAt).toLocaleString('ja-JP')}
                 </span>
@@ -159,6 +169,143 @@ export function ViewerLibrary({
           </ul>
         )}
       </div>
+    </section>
+  )
+}
+
+type ViewingResult = {
+  anonymous?: boolean
+  video: {
+    publicId: string
+    title: string
+    description: string
+    endsAt: string
+  }
+  playback: { url: string; expiresAt: string }
+}
+
+function ViewingPage({
+  publicId,
+  authenticated,
+}: {
+  publicId: string
+  authenticated: boolean
+}) {
+  const [code, setCode] = useState('')
+  const [result, setResult] = useState<ViewingResult | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const returnTo = viewerRouteUrl('viewing', publicId)
+
+  const loadPlayback = useCallback(async () => {
+    setLoading(true)
+    setError('')
+    try {
+      const endpoint = authenticated
+        ? `/api/viewer/videos/${encodeURIComponent(publicId)}/playback`
+        : `/api/public/videos/${encodeURIComponent(publicId)}/playback`
+      setResult(await viewerRequest<ViewingResult>(endpoint))
+    } catch (caught) {
+      if (!(
+        caught instanceof ViewerRequestError &&
+        (caught.status === 401 || caught.status === 404)
+      )) {
+        setError(visibleError(caught))
+      }
+      setResult(null)
+    } finally {
+      setLoading(false)
+    }
+  }, [authenticated, publicId])
+
+  useEffect(() => {
+    void loadPlayback()
+  }, [loadPlayback])
+
+  async function redeem(event: FormEvent) {
+    event.preventDefault()
+    if (busy) return
+    setBusy(true)
+    setError('')
+    try {
+      const redeemed = await viewerRequest<ViewingResult>(
+        `/api/public/videos/${encodeURIComponent(publicId)}/redeem`,
+        'POST',
+        { code },
+      )
+      setCode('')
+      setResult(redeemed)
+    } catch (caught) {
+      setError(visibleError(caught))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  if (loading) {
+    return (
+      <p className="viewer-loading" role="status">
+        視聴権を確認しています…
+      </p>
+    )
+  }
+
+  if (result) {
+    return (
+      <section className="viewing-page" aria-labelledby="viewing-heading">
+        <h1 id="viewing-heading">{result.video.title}</h1>
+        {result.video.description && <p>{result.video.description}</p>}
+        <video controls src={result.playback.url}>
+          このブラウザは動画再生に対応していません。
+        </video>
+        {result.anonymous && (
+          <div className="notice" role="note">
+            <strong>この視聴は30分間だけ有効です。</strong>
+            <span>
+              期限内に登録またはログインしない場合、このコードは再利用できず、動画を再び開けません。
+            </span>
+            <span className="viewing-auth-actions">
+              <a href={viewerRouteUrl('register', undefined, returnTo)}>
+                視聴者登録
+              </a>
+              <a href={viewerRouteUrl('login', undefined, returnTo)}>
+                ログイン
+              </a>
+            </span>
+          </div>
+        )}
+      </section>
+    )
+  }
+
+  return (
+    <section
+      className="card viewer-auth-card"
+      aria-labelledby="viewing-heading"
+    >
+      <h1 id="viewing-heading">視聴コードを入力</h1>
+      <p className="subtle">案内された一回限りのコードを入力してください。</p>
+      <form onSubmit={(event) => void redeem(event)}>
+        <label>
+          視聴コード
+          <input
+            autoComplete="one-time-code"
+            required
+            maxLength={19}
+            value={code}
+            onChange={(event) => setCode(event.target.value)}
+          />
+        </label>
+        {error && (
+          <p className="error" role="alert">
+            {error}
+          </p>
+        )}
+        <button type="submit" disabled={busy}>
+          {busy ? '確認中…' : '視聴を開始'}
+        </button>
+      </form>
     </section>
   )
 }
@@ -267,7 +414,7 @@ export function ViewerApp() {
       authenticated === true &&
       (route.kind === 'register' || route.kind === 'login')
     ) {
-      navigate(viewerRouteUrl('library'), true)
+      navigate(route.returnTo ?? viewerRouteUrl('library'), true)
     }
   }, [authenticated, navigate, route.kind, synchronization.synchronize])
 
@@ -336,7 +483,11 @@ export function ViewerApp() {
         credentials,
       )
       setAuthenticated(true)
-      navigate(viewerRouteUrl('library'))
+      navigate(
+        route.kind === mode && route.returnTo
+          ? route.returnTo
+          : viewerRouteUrl('library'),
+      )
       setSynchronizationState(
         viewerSynchronizationDecision(started.state, {
           type: 'authentication-succeeded',
@@ -410,8 +561,16 @@ export function ViewerApp() {
           mode={route.kind}
           busy={busy}
           error={error}
+          returnTo={route.returnTo}
           onSubmit={(credentials) => void authenticate(route.kind, credentials)}
         />
+      </ViewerLayout>
+    )
+  }
+  if (route.kind === 'viewing') {
+    return (
+      <ViewerLayout>
+        <ViewingPage publicId={route.publicId} authenticated={authenticated} />
       </ViewerLayout>
     )
   }

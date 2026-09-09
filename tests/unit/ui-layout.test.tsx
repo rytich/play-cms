@@ -24,7 +24,7 @@ describe('shared UI layouts', () => {
       '動画',
       'メニュー',
       'ログアウト',
-      '公開と再生は無効',
+      '一般公開は無効',
     ]) {
       expect(html).toContain(text)
     }
@@ -32,7 +32,9 @@ describe('shared UI layouts', () => {
     expect(html).toContain('aria-expanded="false"')
     expect(html).toContain('href="/admin/videos"')
     expect(html).toContain('href="#admin-main"')
-    expect(html).not.toContain('Filma連携')
+    expect(html).toContain('Filma連携')
+    expect(html).toContain('href="/admin/filma"')
+    expect(html).toContain('href="/admin/videos" aria-current="page"')
     expect(html).not.toContain('アップロード')
   })
 

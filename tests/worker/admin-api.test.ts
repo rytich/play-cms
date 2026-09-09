@@ -643,14 +643,8 @@ describe('admin API', () => {
     expect(text).not.toContain('code_hash')
   })
 
-  it('does not expose viewer, redemption, publication, or unknown API routes', async () => {
-    const paths = [
-      '/v/public-id',
-      '/api/public/videos/public-id/redeem',
-      '/api/viewer/videos/public-id/playback',
-      '/api/admin/videos/id/publish',
-      '/api/not-defined',
-    ]
+  it('does not expose publication or unknown API routes', async () => {
+    const paths = ['/api/admin/videos/id/publish', '/api/not-defined']
     for (const path of paths) {
       const isWrite = path.includes('redeem') || path.includes('publish')
       const response = await api(path, {

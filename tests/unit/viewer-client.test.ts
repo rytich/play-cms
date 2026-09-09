@@ -28,6 +28,7 @@ describe('viewer client', () => {
         mode: 'register',
         busy: false,
         error: '',
+        returnTo: '/v/public-a',
         onSubmit: () => {},
       }),
     )
@@ -40,7 +41,7 @@ describe('viewer client', () => {
       }),
     )
     expect(register).toContain('視聴者登録')
-    expect(register).toContain('href="/login"')
+    expect(register).toContain('href="/login?returnTo=%2Fv%2Fpublic-a"')
     expect(login).toContain('視聴者ログイン')
     expect(login).toContain('href="/register"')
     expect(register).not.toContain('localStorage')
@@ -60,6 +61,7 @@ describe('viewer client', () => {
       createElement(ViewerLibrary, { videos: [], onLogout: () => {} }),
     )
     expect(list).toContain('Synthetic title')
+    expect(list).toContain('href="/v/public-a"')
     expect(list).toContain('2100')
     expect(list).not.toContain(item.description)
     expect(empty).toContain('現在視聴できる動画はありません')

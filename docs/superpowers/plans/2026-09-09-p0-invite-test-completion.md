@@ -85,11 +85,11 @@
 
   `test-infrastructure-error`、動画限定不明、期限不明、5分超過ではP0も停止する。domain制限とrefresh延長の残存リスクだけをADR 0003でP0限定受容し、testを削除したり`all-conditions-passed`へ読み替えたりしない。
 
-- [ ] **Step 2: migrationとcoreの失敗テストを書く**
+- [x] **Step 2: migrationとcoreの失敗テストを書く**
 
   `0004`には暗号化済みFilma設定、30分の匿名視聴session、redemptionを追加する。`redemptions.code_id`はunique、`(code_id, video_id)`は既存`access_codes(id, video_id)`と一致させ、匿名sessionまたはviewer accountのちょうど一方だけを保持するCHECKを付ける。既存3 migrationを適用した合成D1へ`0004`を適用し、既存account、session、video、access code、entitlementが保持される失敗テストを書く。
 
-- [ ] **Step 3: Filma設定とgrant検証の失敗テストを書く**
+- [x] **Step 3: Filma設定とgrant検証の失敗テストを書く**
 
   `GET /api/admin/filma`は`{configured, verifiedAt}`だけを返し、`PUT /api/admin/filma`は`{apiKey}`だけを受ける。接続確認成功後にAES-GCMで保存し、平文・nonce・ciphertextをresponseへ返さない。`issuePlaybackGrant()`が固定host、timeout、response上限、redirect拒否、`expiresAt <= notAfter`、HTTPS URLを守ることをtestで固定する。
 
@@ -106,21 +106,21 @@
 
   専用テスト動画、専用組織で不存在と確認したテスト用ID、無効なテスト認証、拒否originを使うlive contract testで、200、404、401、403の実statusと200 schemaが上記分類に一致することを確認するまでproductionの動画作成・更新へ接続しない。固定した公式資料へ到達できない、実契約が資料と一致しない、またはstatus/schemaを安全に分類できない場合はStep 4を停止して#16へ未確認事項を記録する。別endpointやfieldを推測せず、動画をD1へ保存しない。
 
-- [ ] **Step 5: キー消費・管理表示・権利移行の失敗テストを書く**
+- [x] **Step 5: キー消費・管理表示・権利移行の失敗テストを書く**
 
   `POST /api/public/videos/:publicId/redeem`、`GET /api/public/videos/:publicId/playback`、`GET /api/viewer/videos/:publicId/playback`を対象に、未ログイン、ログイン済み、登録時移行、ログイン時移行、直列再利用、二並行再利用、期限切れ匿名session、別browser、既存entitlementを検証する。Filma grant失敗時に`redemptions`と`entitlements`が0件で、access codeが未使用であることを必ず確認する。
 
   管理API/UIでは`redemptions`が存在するキーを`used`として一覧・絞り込みに表示し、有効／無効の一括変更と単体取消の対象から除外する。redeem対bulk、redeem対revokeの並行要求はどちらか一方だけを成功させ、使用済みになった後の変更は409、所有動画が違う場合は404とする。既存entitlementとredemptionは管理操作で削除しない。
 
-- [ ] **Step 6: 最小実装でテストを通す**
+- [x] **Step 6: 最小実装でテストを通す**
 
   redeemは、P0再生フラグと専用動画allowlist、ハッシュ一致候補、availabilityを読み取り、Filma grantを取得・検証した後、D1 transactionで同じ条件を再確認して一件だけ消費する。フラグ未設定・無効、allowlist不一致ではFilmaへ接続せずキーを未使用のまま503で閉じる。匿名時は`play_anonymous`を`HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=1800`で発行する。viewer時は同じtransactionでentitlementをupsertする。register/login時は有効な匿名sessionだけを同じtransactionで移し、移行後に匿名sessionを失効させる。
 
-- [ ] **Step 7: URL単位の管理・視聴UIを実装する**
+- [x] **Step 7: URL単位の管理・視聴UIを実装する**
 
   `/admin/filma`にキー設定と接続状態を実装する。`/v/:publicId`はredeem前にコード入力だけを表示する。成功後に5分以下のgrantで再生し、「この視聴は30分間だけ有効です。期限内に登録またはログインしない場合、このコードは再利用できず、動画を再び開けません。」を表示する。`/register?returnTo=/v/:publicId`と`/login?returnTo=/v/:publicId`はpublicId以外をURLへ載せない。ライブラリの動画リンクは`/v/:publicId`へ遷移する。管理キー一覧は`used`を表示し、使用済み行の選択・有効化・無効化・取消をdisabledにする。
 
-- [ ] **Step 8: 境界・ブラウザ・全検証を実行する**
+- [x] **Step 8: 境界・ブラウザ・全検証を実行する**
 
   `draft`、公開前、終了時刻ちょうど、期限切れ、不明IDを、public page、redeem、anonymous playback、library、viewer playbackの表で検証する。ブラウザではdirect open、reload、back、forward、匿名から登録、再login後libraryを確認する。
 

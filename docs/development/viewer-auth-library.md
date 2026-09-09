@@ -38,13 +38,13 @@ PLAY_VERIFY_BUILD=true pnpm build
 ブラウザ受入も別portと独立browser contextを使い、合成viewerと合成動画だけで行う。既存preview、実メールアドレス、実動画ID、実Filma APIは使わない。
 logoutと履歴復帰の同期判断は`pnpm test`対象の純粋関数テストを必須検証とし、実ViewerAppのPlaywright回帰は`pnpm test:browser:viewer-logout`で補助確認する。今回の範囲ではCI・開発環境や製品依存を拡張しないため、ブラウザを`pnpm verify`の必須条件にはしない。
 
-## 今回含めないもの
+## 後続実装
 
-- 動画再生とFilma連携
-- コード消費、匿名session、視聴権引き継ぎ
+使い切りコード消費、匿名session、視聴権引き継ぎ、既存視聴権からの再生画面は[Issue #35の視聴フロー](viewing-flow.md)で追加した。次の項目は引き続き対象外である。
+
 - メール確認、パスワード再設定、プロフィール
 - 管理者による視聴権付与API
 
-本番の`entitlements`作成経路は追加していない。後続のコード消費機能だけを唯一の本番writerとし、この段階では合成テストが視聴権データを投入する。Filma再生は[再生契約](filma-playback-contract.md)がNO-GOの間は開始しない。
+本番の`entitlements`作成経路はコード消費だけとし、任意付与APIは追加しない。Filma再生は[再生契約](filma-playback-contract.md)のGO条件を確認するまで既定無効のままとする。
 
 実装範囲と残りのP0工程は[視聴者認証・ライブラリ計画](../superpowers/plans/2026-09-09-viewer-auth-library-implementation.md)および[P0実装計画](../superpowers/plans/2026-09-07-p0-prototype-implementation.md)を参照する。

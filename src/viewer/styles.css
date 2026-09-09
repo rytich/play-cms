@@ -68,6 +68,19 @@
   color: var(--play-color-muted);
 }
 
+.viewing-page video {
+  display: block;
+  width: 100%;
+  max-height: 70vh;
+  margin-block: 20px;
+  background: #000;
+}
+
+.viewing-auth-actions {
+  display: flex;
+  gap: 16px;
+}
+
 .viewer-empty,
 .viewer-loading {
   padding: 44px 8px;

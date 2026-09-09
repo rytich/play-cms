@@ -8,6 +8,8 @@ type AdminLayoutProps = {
   siteName: string
   logoPath: string | null
   videosHref?: string
+  filmaHref?: string
+  currentPage?: 'videos' | 'filma'
   onVideos: () => boolean | void
   onLogout: () => void
   children: ReactNode
@@ -17,6 +19,8 @@ export function AdminLayout({
   siteName,
   logoPath,
   videosHref = '/admin/videos',
+  filmaHref = '/admin/filma',
+  currentPage = 'videos',
   onVideos,
   onLogout,
   children,
@@ -66,8 +70,18 @@ export function AdminLayout({
           <span>管理画面</span>
         </div>
         <nav aria-label="管理画面">
-          <a href={videosHref} aria-current="page" onClick={followVideos}>
+          <a
+            href={videosHref}
+            aria-current={currentPage === 'videos' ? 'page' : undefined}
+            onClick={followVideos}
+          >
             動画
+          </a>
+          <a
+            href={filmaHref}
+            aria-current={currentPage === 'filma' ? 'page' : undefined}
+          >
+            Filma連携
           </a>
         </nav>
         <button
@@ -80,8 +94,10 @@ export function AdminLayout({
       </aside>
       <main id="admin-main" className="admin-main" tabIndex={-1}>
         <aside className="notice prototype-notice" role="note">
-          <strong>公開と再生は無効</strong>
-          <span>下書き登録と閲覧用キー管理だけのローカル試作です。</span>
+          <strong>一般公開は無効</strong>
+          <span>
+            再生は専用招待試験で明示的に有効化した場合だけ利用できます。
+          </span>
         </aside>
         {children}
       </main>

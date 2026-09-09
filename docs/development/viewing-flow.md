@@ -1,0 +1,38 @@
+# 使い切り視聴フロー
+
+[Issue #35](https://github.com/rytich/play-cms/issues/35)で、使い切りコードから匿名視聴、視聴者アカウントへの視聴権移行までを縦に接続した。一般公開と実Filma再生のGO判定はこの実装に含まない。
+
+## 画面とAPI
+
+- `/admin/filma`: Filma APIキーの接続確認と暗号化保存。保存後は接続状態だけを表示し、キーは再表示しない。
+- `/v/:publicId`: 視聴権がない間はコード入力だけを表示する。引換成功後だけ動画情報と有効期限付き再生情報を表示する。
+- `POST /api/public/videos/:publicId/redeem`: 未ログイン時は30分の匿名session、viewer時は視聴権を作成する。
+- `GET /api/public/videos/:publicId/playback`: 有効な匿名sessionとその引換対象だけを許可する。
+- `GET /api/viewer/videos/:publicId/playback`: ログイン中viewerの視聴権だけを許可する。
+
+`/register?returnTo=/v/:publicId`と`/login?returnTo=/v/:publicId`は、検証済みの同一サイト視聴URLだけを戻り先にできる。コード、再生URL、視聴者IDはURLやbrowser storageへ保存しない。
+
+## 原子性と非公開境界
+
+引換は、公開中の期間内動画、有効・未使用コード、P0フラグと専用FilmaファイルIDの完全一致を確認する。Filma grantを検証できた後、D1 batch内で同じ条件を再確認して一件だけ消費する。Filma失敗、フラグ無効、allowlist不一致、不正または5分を超えるgrantでは、redemptionも視聴権も作らずコードを未使用のまま残す。
+
+匿名Cookieは`HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=1800`とし、トークン本体ではなくhashだけをD1に保存する。登録またはログイン時に有効な匿名視聴権を同一transactionで一度だけviewerへ移し、元の匿名sessionを失効させる。管理一覧の使用済みキーは選択・有効化・無効化・取消の対象にできない。
+
+## 検証
+
+通常のunit/Workerテストは合成bindingと隔離D1だけを使う。実Filma APIに接続しない。補助ブラウザ受入はbuild済みUIを一時loopback serverで配信し、別browser contextと合成API応答で、direct open、reload、back/forward、匿名から登録、再ログイン後library、別browserでの再利用拒否、使用済み管理行を確認する。後者はD1試験の代用ではない。
+
+```bash
+pnpm vitest run tests/unit/viewing.test.ts tests/unit/filma-playback-client.test.ts
+pnpm vitest run --config vitest.worker.config.ts tests/worker/viewing-flow.test.ts tests/worker/viewing-migration.test.ts tests/worker/admin-management.test.ts
+PLAYWRIGHT_MODULE_PATH=/path/to/playwright PLAYWRIGHT_CHROME_PATH=/path/to/chrome pnpm test:browser:viewing
+```
+
+`pnpm test:filma:playback:live`は通常の`pnpm verify`に含めない手動契約テストである。`FILMA_LIVE_API_KEY`、`FILMA_LIVE_FILE_ID`、`FILMA_LIVE_ALLOWED_ORIGIN`、`FILMA_LIVE_DENIED_ORIGIN`のどれかがない場合は、request前に`FILMA_LIVE_CONFIG_MISSING`で停止する。
+
+## 未確認と停止条件
+
+- 実Filma storage endpointの200/401/403/404 schemaとstatus、動画単位のgrant、5分以下の期限、拒否origin、期限後grant/refreshは未確認。
+- 実storage契約が確定するまで、動画保存前のlive確認を製品の作成・更新APIへ接続しない。
+- `PLAY_CMS_P0_INVITE_PLAYBACK` は既定無効。実契約を確認できない間は、招待試験でも有効化せずコードを消費しない。
+- remote D1、Cloudflare招待環境、実動画の保存・再生・deployは後続Taskの対象。
