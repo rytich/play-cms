@@ -44,3 +44,6 @@ pnpm verify
 - [Issue #35: 使い切りキー・匿名視聴・視聴権引き継ぎ](https://github.com/rytich/play-cms/issues/35)
 - [Issue #36: D1 migrationとCloudflare招待環境](https://github.com/rytich/play-cms/issues/36)
 - [Issue #37: 3〜5名の招待操作確認](https://github.com/rytich/play-cms/issues/37)
+- [Issue #16: Filma再生契約のGO/NO-GO](https://github.com/rytich/play-cms/issues/16)
+- [Issue #30: 公開前ブラウザ受入](https://github.com/rytich/play-cms/issues/30)
+- [全Issueの現在地](docs/development/issue-status.md)

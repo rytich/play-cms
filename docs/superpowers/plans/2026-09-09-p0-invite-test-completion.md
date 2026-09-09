@@ -33,6 +33,7 @@
 - Create: `src/core/viewing.ts`
 - Create: `src/adapters/database/viewing-repository.ts`
 - Create: `src/adapters/filma/playback-client.ts`
+- Modify: `src/adapters/database/admin-repository.ts`
 - Modify: `src/adapters/database/viewer-repository.ts`
 - Modify: `src/adapters/secrets/web-crypto.ts`
 - Modify: `src/server/env.d.ts`
@@ -42,11 +43,20 @@
 - Modify: `src/viewer/routes.ts`
 - Modify: `src/viewer/styles.css`
 - Modify: `src/admin/main.tsx`
+- Modify: `src/admin/client.ts`
+- Modify: `src/admin/routes.ts`
+- Modify: `src/ui/layouts/AdminLayout.tsx`
 - Test: `tests/unit/viewing.test.ts`
 - Test: `tests/unit/filma-playback-client.test.ts`
 - Test: `tests/worker/viewing-flow.test.ts`
 - Test: `tests/worker/viewing-migration.test.ts`
+- Test: `tests/worker/admin-management.test.ts`
 - Test: `tests/browser/viewing-flow.mjs`
+- Test: `tests/unit/admin-client.test.ts`
+- Test: `tests/unit/admin-routes.test.ts`
+- Test: `tests/unit/ui-layout.test.tsx`
+- Test: `tests/live/filma-playback.live.test.ts`
+- Create: `vitest.playback-live.config.ts`
 - Modify: `package.json`
 - Create: `docs/development/viewing-flow.md`
 
@@ -58,9 +68,13 @@
 - Produces: `redeemForAnonymous(db, input)`と`redeemForViewer(db, input)`。code hash、video、時刻を同一transactionで再確認し、一つだけredemptionを作る。
 - Consumes: `findSessionAccount()`、`createViewerWithSession()`、`availableLibraryItems()`、既存の`play_session` Cookie。
 
-- [ ] **Step 1: Filma再生契約を再確認する**
+- [ ] **Step 1: Filma再生契約専用のlive testでGO条件を確認する**
 
-  `pnpm test:filma:live`をGit管理外の専用テスト値で一回だけ実行し、#16の三条件を確認する。APIキー、動画ID、JWT、URL、応答本文は出力しない。非null期限、`notAfter`以下、許可ドメイン外拒否のいずれかを確認できなければ、#16へNO-GOを追記し、このTaskのproduction有効化を停止する。
+  既存の`pnpm test:filma:live`はtoken endpointの認証だけを確認するため、再生GOの証拠に使わない。通常CIから除外した`pnpm test:filma:playback:live`を追加し、Git管理外の`FILMA_LIVE_API_KEY`、`FILMA_LIVE_FILE_ID`、`FILMA_LIVE_ALLOWED_ORIGIN`、`FILMA_LIVE_DENIED_ORIGIN`が全てある場合だけ手動実行する。
+
+  専用テストは、公開済みの専用動画一件に対して`jwt_expires_at = now + 10秒`を指定し、返却URL内tokenの非null期限が指定値以下であること、許可originで再生開始できること、拒否originで403になること、11秒後に同じgrantとrefreshの両方が拒否されることを確認する。status、期限比較、確認項目名だけを出力し、APIキー、動画ID、JWT、URL、応答本文を出力しない。
+
+  現行公式仕様はJWTへdomain制限を適用しないと明記しているため、仕様が変わらない限り拒否origin testは失敗し、#16はNO-GOのままとなる。この場合はproduction codeとキー消費へ進まない。P0招待試験だけdomain制限を緩和する場合も黙ってtestを削除せず、ユーザー承認、動画単位・5分以下のtoken、テスト動画限定、一般公開前に再度停止する条件をADRへ保存してから、計画と#16を更新する。
 
 - [ ] **Step 2: migrationとcoreの失敗テストを書く**
 
@@ -70,31 +84,40 @@
 
   `GET /api/admin/filma`は`{configured, verifiedAt}`だけを返し、`PUT /api/admin/filma`は`{apiKey}`だけを受ける。接続確認成功後にAES-GCMで保存し、平文・nonce・ciphertextをresponseへ返さない。`issuePlaybackGrant()`が固定host、timeout、response上限、redirect拒否、`expiresAt <= notAfter`、HTTPS URLを守ることをtestで固定する。
 
-- [ ] **Step 4: キー消費と権利移行の失敗テストを書く**
+- [ ] **Step 4: `/admin/filma`と動画保存前検証の失敗テストを書く**
+
+  `src/admin/routes.ts`が`/admin/filma`を固有画面として認識し、`AdminLayout`の「Filma連携」から遷移でき、direct open・reload・back・forwardで復元できることをtestで固定する。画面は未設定、確認中、接続済み、接続失敗だけを示し、保存済みキーを再表示しない。
+
+  動画作成・更新は、暗号化済みキーを復号し、Filmaの`GET /filmaapi/storage/{id}`が対象ファイルを返し、`mediafile_id`、公開状態、再生情報が契約を満たした場合だけD1へ保存する。認証、到達性、存在、契約の失敗時は動画を新規作成・更新せず、秘密を含まない503または入力対象を示さない404へ変換する。
+
+- [ ] **Step 5: キー消費・管理表示・権利移行の失敗テストを書く**
 
   `POST /api/public/videos/:publicId/redeem`、`GET /api/public/videos/:publicId/playback`、`GET /api/viewer/videos/:publicId/playback`を対象に、未ログイン、ログイン済み、登録時移行、ログイン時移行、直列再利用、二並行再利用、期限切れ匿名session、別browser、既存entitlementを検証する。Filma grant失敗時に`redemptions`と`entitlements`が0件で、access codeが未使用であることを必ず確認する。
 
-- [ ] **Step 5: 最小実装でテストを通す**
+  管理API/UIでは`redemptions`が存在するキーを`used`として一覧・絞り込みに表示し、有効／無効の一括変更と単体取消の対象から除外する。redeem対bulk、redeem対revokeの並行要求はどちらか一方だけを成功させ、使用済みになった後の変更は409、所有動画が違う場合は404とする。既存entitlementとredemptionは管理操作で削除しない。
+
+- [ ] **Step 6: 最小実装でテストを通す**
 
   redeemは、ハッシュ一致候補とavailabilityを読み取り、Filma grantを取得・検証した後、D1 transactionで同じ条件を再確認して一件だけ消費する。匿名時は`play_anonymous`を`HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=1800`で発行する。viewer時は同じtransactionでentitlementをupsertする。register/login時は有効な匿名sessionだけを同じtransactionで移し、移行後に匿名sessionを失効させる。
 
-- [ ] **Step 6: URL単位の視聴UIを実装する**
+- [ ] **Step 7: URL単位の管理・視聴UIを実装する**
 
-  `/v/:publicId`はredeem前にコード入力だけを表示する。成功後に5分以下のgrantで再生し、「この視聴は30分間だけ有効です。期限内に登録またはログインしない場合、このコードは再利用できず、動画を再び開けません。」を表示する。`/register?returnTo=/v/:publicId`と`/login?returnTo=/v/:publicId`はpublicId以外をURLへ載せない。ライブラリの動画リンクは`/v/:publicId`へ遷移する。
+  `/admin/filma`にキー設定と接続状態を実装する。`/v/:publicId`はredeem前にコード入力だけを表示する。成功後に5分以下のgrantで再生し、「この視聴は30分間だけ有効です。期限内に登録またはログインしない場合、このコードは再利用できず、動画を再び開けません。」を表示する。`/register?returnTo=/v/:publicId`と`/login?returnTo=/v/:publicId`はpublicId以外をURLへ載せない。ライブラリの動画リンクは`/v/:publicId`へ遷移する。管理キー一覧は`used`を表示し、使用済み行の選択・有効化・無効化・取消をdisabledにする。
 
-- [ ] **Step 7: 境界・ブラウザ・全検証を実行する**
+- [ ] **Step 8: 境界・ブラウザ・全検証を実行する**
 
   `draft`、公開前、終了時刻ちょうど、期限切れ、不明IDを、public page、redeem、anonymous playback、library、viewer playbackの表で検証する。ブラウザではdirect open、reload、back、forward、匿名から登録、再login後libraryを確認する。
 
   ```bash
   pnpm vitest run tests/unit/viewing.test.ts tests/unit/filma-playback-client.test.ts
-  pnpm vitest run --config vitest.worker.config.ts tests/worker/viewing-flow.test.ts tests/worker/viewing-migration.test.ts
+  pnpm vitest run tests/unit/admin-client.test.ts tests/unit/admin-routes.test.ts tests/unit/ui-layout.test.tsx
+  pnpm vitest run --config vitest.worker.config.ts tests/worker/viewing-flow.test.ts tests/worker/viewing-migration.test.ts tests/worker/admin-management.test.ts
   pnpm test:browser:viewing
   pnpm verify
   git diff --check origin/develop...HEAD
   ```
 
-- [ ] **Step 8: 記録・commit・PR・独立レビューを行う**
+- [ ] **Step 9: 記録・commit・PR・独立レビューを行う**
 
   #35へGO/NO-GO、件数、command、head SHA、未確認事項を記録する。秘密値がdiffとログにないことを確認し、`feat: complete one-time viewing flow (#35)`でcommitする。PRは`develop`向けに`Refs #35`を記載し、別5.6系レビュー後、knrytのexact-head承認・CI成功を待つ。
 
@@ -135,7 +158,7 @@
 
 - [ ] **Step 3: invite環境設定と手順を実装する**
 
-  rootはlocal-onlyのまま維持し、`env.invite`だけに専用Workerとremote D1 bindingを置く。local-only middlewareは`PLAY_LOCAL_ONLY === 'true'`の場合だけloopbackを要求し、inviteではCloudflareのclient IPを匿名化したbucketを使う。`docs/operations/cloudflare-invite-deploy.md`へ、対象account確認、同名resource不存在確認、D1作成、migration一覧、backup/export、secret登録、dry run、deploy、rollback、試験終了時停止を順番に記載する。
+  rootはlocal-onlyのまま維持し、`env.invite`だけに専用Workerとremote D1 bindingを置く。local-only middlewareは`PLAY_LOCAL_ONLY === 'true'`の場合だけloopbackを要求し、inviteではCloudflareのclient IPを匿名化したbucketを使う。`docs/operations/cloudflare-invite-deploy.md`へ、対象account確認、同名resource不存在確認、D1作成、migration一覧、backup/export、secret登録、dry run、maintenance baseline、機能版deploy、rollback、試験終了時停止を順番に記載する。
 
 - [ ] **Step 4: ローカル検証とdry runを完了する**
 
@@ -153,13 +176,17 @@
 
   `pnpm wrangler whoami`でaccount名を確認し、予定名と同名のWorker/D1が存在しないことをlist commandで確認する。新規の専用D1だけを作成し、返却されたIDを`env.invite.d1_databases`へ設定してtypesとconfig検査を再実行する。既存resourceがある場合は上書きせず停止する。
 
-- [ ] **Step 6: migrationとsecretを適用してデプロイする**
+- [ ] **Step 6: maintenance baselineを先にデプロイする**
 
-  `d1 migrations list --remote --env invite`で対象名と未適用一覧を確認し、0001から昇順で専用D1へ適用する。`PLAY_BOOTSTRAP_TOKEN`、`PLAY_ENCRYPTION_KEY`、`PLAY_RATE_LIMIT_KEY`、Filma APIキーに必要なsecretを対話入力し、値をファイル・shell history・Issueへ残さない。dry runとconfig検査を再実行してからinvite環境をdeployする。
+  初回はAPIとAssetsの全routeへ503を返すmaintenance versionを同じinvite Worker名へデプロイし、そのversion IDと停止動作を確認する。これを機能版の直前rollback先とする。招待URLはまだ共有しない。Worker rollbackはcodeとroutingだけを戻し、D1 schema/dataを戻さないことを運用文書へ明記する。
 
-- [ ] **Step 7: 管理者初期設定とsmoke testを行う**
+- [ ] **Step 7: migrationとsecretを適用して機能版をデプロイする**
 
-  招待URLで管理者を一度だけ初期登録し、成功後にbootstrap secretを削除する。専用テスト動画とテストaccountでhealth、管理者login、動画登録、キー発行、viewer login、library、playback、期限切れ404を確認する。失敗時は新規招待を停止し、前Worker versionへrollbackする。D1へ書き込まれたテスト値は保持し、原因調査のため無断削除しない。
+  migration前にD1 exportを取得し、schemaとdataの復元手順をWorker rollbackと分離して記録する。`d1 migrations list --remote --env invite`で対象名と未適用一覧を確認し、0001から昇順で専用D1へ適用する。`PLAY_BOOTSTRAP_TOKEN`、`PLAY_ENCRYPTION_KEY`、`PLAY_RATE_LIMIT_KEY`、Filma APIキーに必要なsecretを対話入力し、値をファイル・shell history・Issueへ残さない。dry runとconfig検査を再実行してからinvite環境をdeployする。
+
+- [ ] **Step 8: 管理者初期設定とsmoke testを行う**
+
+  招待URLで管理者を一度だけ初期登録し、成功後にbootstrap secretを削除する。専用テスト動画とテストaccountでhealth、管理者login、動画登録、キー発行、viewer login、library、playback、期限切れ404を確認する。失敗時は新規招待を停止し、maintenance baselineへWorkerをrollbackする。migration後のD1を旧codeが読めない場合はWorker rollbackで復旧したと扱わず、maintenanceを維持して事前exportからの復元可否を判断する。D1へ書き込まれたテスト値は保持し、原因調査のため無断削除しない。
 
 ---
 
