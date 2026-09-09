@@ -294,6 +294,13 @@ app.post('/api/admin/videos', async (c) => {
   return c.json({ video }, 201)
 })
 
+app.get('/api/admin/videos/:id', async (c) => {
+  const auth = await requireAdmin(c)
+  if ('response' in auth) return auth.response
+  const video = await findVideo(c.env.DATABASE, c.req.param('id'))
+  return video ? c.json({ video }) : c.json(errorBody.notFound, 404)
+})
+
 app.put('/api/admin/videos/:id', async (c) => {
   const auth = await requireAdmin(c)
   if ('response' in auth) return auth.response

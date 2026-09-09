@@ -19,6 +19,8 @@ Tracking: [Issue #18](https://github.com/rytich/play-cms/issues/18)
 
 今回のアプリは**localhost限定**。ローカルD1だけを使い、遠隔リソース作成・migration・デプロイは行わない。Workers Freeのpassword hash測定は試験公開前の必須ゲートとして残す。PBKDF2-HMAC-SHA-256は600,000 iterationsから弱めない。
 
+2026-09-09承認の[Issue #30](https://github.com/rytich/play-cms/issues/30)（実BFCache復帰・実200%ブラウザ拡大）も公開前の必須ゲートとする。管理UIのPR #27から後続へ分離したもので、未確認を確認済みにはしない。Issue #30未完了でもローカル開発・コード統合は進められるが、外部公開・実配信は開始しない。検証のためにキャッシュ禁止・認証・秘密消去の防御を緩和しない。
+
 APIキーの保存・接続設定、実Filma通信、視聴者認証・視聴権、キー消費、アップロード、サムネイル、通知は次の工程。DBは現時点で使用するテーブルだけを追加する。単純なSQLとprepared statementを使用し、この段階ではORM・schema検証用の依存を増やさない。
 
 初期登録は256bit以上のランダムなローカルbootstrap tokenと管理者未作成・未使用状態を要求し、DB制約とtransactionで一件に限定する。パスワードはsalt付きハッシュ、sessionと閲覧用キーはSHA-256ハッシュだけ保存する。sessionは8時間、HttpOnly/Secure/SameSite=Lax cookieを使う。
