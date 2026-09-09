@@ -84,6 +84,39 @@ describe('viewer accounts and entitlements migration', () => {
          VALUES ('viewer-a', 'video-a', 'code-a', 7)`,
       ).run(),
     ).rejects.toThrow()
+
+    await env.OLD_DATABASE.batch([
+      env.OLD_DATABASE.prepare(
+        `INSERT INTO videos
+         (id, public_id, filma_file_id, title, description, status,
+          starts_at, ends_at, created_at, updated_at)
+         VALUES ('video-b', 'public-b', '2', 'B', '', 'published',
+                 '2026-09-09T00:00:00.000Z', '2026-09-10T00:00:00.000Z', 8, 8)`,
+      ),
+      env.OLD_DATABASE.prepare(
+        `INSERT INTO access_codes
+         (id, video_id, code_hash, created_at, revoked_at, is_enabled)
+         VALUES ('code-b', 'video-b', 'code-hash-b', 8, NULL, 1)`,
+      ),
+      env.OLD_DATABASE.prepare(
+        `INSERT INTO accounts (id, role, email, password_hash, created_at)
+         VALUES ('viewer-b', 'viewer', 'viewer-b@example.test', 'hash-v-b', 9)`,
+      ),
+    ])
+    await expect(
+      env.OLD_DATABASE.prepare(
+        `INSERT INTO entitlements
+         (account_id, video_id, source_code_id, granted_at)
+         VALUES ('viewer-b', 'video-a', 'code-b', 9)`,
+      ).run(),
+    ).rejects.toThrow()
+    await expect(
+      env.OLD_DATABASE.prepare(
+        `INSERT INTO entitlements
+         (account_id, video_id, source_code_id, granted_at)
+         VALUES ('viewer-b', 'video-b', 'code-b', 10)`,
+      ).run(),
+    ).resolves.toMatchObject({ success: true })
     await expect(
       env.OLD_DATABASE.prepare(
         `INSERT INTO accounts (id, role, email, password_hash, created_at)

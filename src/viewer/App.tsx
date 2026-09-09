@@ -10,7 +10,13 @@ import {
   newPasswordValidationError,
   viewerRequest,
 } from './client'
+import { viewerTimeZoneLabel } from './presentation'
 import { parseViewerRoute, viewerRouteUrl } from './routes'
+import {
+  initialViewerSynchronizationState,
+  viewerSynchronizationDecision,
+} from './synchronization'
+import type { ViewerLogoutState } from './synchronization'
 import './styles.css'
 
 function ViewerLayout({ children }: { children: ReactNode }) {
@@ -117,7 +123,10 @@ export function ViewerLibrary({
         <div>
           <h1 id="library-heading">視聴可能な動画</h1>
           <p className="subtle">
-            日時は{Intl.DateTimeFormat().resolvedOptions().timeZone}
+            日時は
+            {viewerTimeZoneLabel(
+              Intl.DateTimeFormat().resolvedOptions().timeZone,
+            )}
             で表示します。
           </p>
         </div>
@@ -160,8 +169,6 @@ function visibleError(error: unknown) {
     : '現在処理できません。時間をおいてもう一度お試しください。'
 }
 
-export type ViewerLogoutState = 'idle' | 'pending' | 'failed'
-
 export async function performViewerLogout(input: {
   request: () => Promise<unknown>
   onStart: () => void
@@ -186,8 +193,14 @@ export function ViewerApp() {
   const [videos, setVideos] = useState<ViewerLibraryItem[]>([])
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
-  const [logoutState, setLogoutState] = useState<ViewerLogoutState>('idle')
-  const [explicitAuthentication, setExplicitAuthentication] = useState(false)
+  const [synchronizationState, setSynchronizationState] = useState(
+    initialViewerSynchronizationState,
+  )
+  const { logoutState } = synchronizationState
+  const synchronization = viewerSynchronizationDecision(synchronizationState, {
+    type: 'observed',
+    routeKind: route.kind,
+  })
 
   const navigate = useCallback((path: string, replace = false) => {
     window.history[replace ? 'replaceState' : 'pushState'](null, '', path)
@@ -200,29 +213,26 @@ export function ViewerApp() {
         window.location.pathname,
         window.location.search,
       )
-      if (
-        logoutState === 'failed' &&
-        (restoredRoute.kind === 'register' || restoredRoute.kind === 'login')
-      ) {
-        setLogoutState('idle')
+      const decision = viewerSynchronizationDecision(synchronizationState, {
+        type: 'history-restored',
+        routeKind: restoredRoute.kind,
+      })
+      setSynchronizationState(decision.state)
+      if (decision.discardCachedVideos) {
         setVideos([])
+      }
+      if (decision.discardAuthentication) {
         setAuthenticated(false)
-        setExplicitAuthentication(true)
-      } else if (
-        restoredRoute.kind !== 'register' &&
-        restoredRoute.kind !== 'login'
-      ) {
-        setExplicitAuthentication(false)
       }
       setRoute(restoredRoute)
       setError('')
     }
     window.addEventListener('popstate', restoreRoute)
     return () => window.removeEventListener('popstate', restoreRoute)
-  }, [logoutState])
+  }, [synchronizationState])
 
   useEffect(() => {
-    if (logoutState === 'pending' || explicitAuthentication) return
+    if (!synchronization.synchronize) return
     let active = true
     if (logoutState !== 'failed') setAuthenticated(null)
     void viewerRequest<{ authenticated: true }>('/api/viewer/session')
@@ -244,10 +254,10 @@ export function ViewerApp() {
     return () => {
       active = false
     }
-  }, [explicitAuthentication, logoutState, route])
+  }, [logoutState, route, synchronization.synchronize])
 
   useEffect(() => {
-    if (logoutState === 'pending' || explicitAuthentication) return
+    if (!synchronization.synchronize) return
     if (authenticated === false && route.kind === 'library') {
       setVideos([])
       navigate(viewerRouteUrl('login'), true)
@@ -259,12 +269,11 @@ export function ViewerApp() {
     ) {
       navigate(viewerRouteUrl('library'), true)
     }
-  }, [authenticated, explicitAuthentication, logoutState, navigate, route.kind])
+  }, [authenticated, navigate, route.kind, synchronization.synchronize])
 
   useEffect(() => {
     if (
-      logoutState === 'pending' ||
-      explicitAuthentication ||
+      !synchronization.synchronize ||
       authenticated !== true ||
       route.kind !== 'library'
     )
@@ -291,7 +300,13 @@ export function ViewerApp() {
     return () => {
       active = false
     }
-  }, [authenticated, explicitAuthentication, logoutState, navigate, route.kind])
+  }, [
+    authenticated,
+    logoutState,
+    navigate,
+    route.kind,
+    synchronization.synchronize,
+  ])
 
   async function authenticate(
     mode: 'register' | 'login',
@@ -307,9 +322,12 @@ export function ViewerApp() {
       return
     }
     setBusy(true)
-    setVideos([])
-    setLogoutState('idle')
-    setExplicitAuthentication(true)
+    const started = viewerSynchronizationDecision(synchronizationState, {
+      type: 'authentication-started',
+      routeKind: mode,
+    })
+    if (started.discardCachedVideos) setVideos([])
+    setSynchronizationState(started.state)
     setError('')
     try {
       await viewerRequest(
@@ -319,7 +337,12 @@ export function ViewerApp() {
       )
       setAuthenticated(true)
       navigate(viewerRouteUrl('library'))
-      setExplicitAuthentication(false)
+      setSynchronizationState(
+        viewerSynchronizationDecision(started.state, {
+          type: 'authentication-succeeded',
+          routeKind: 'library',
+        }).state,
+      )
     } catch (caught) {
       setError(visibleError(caught))
     } finally {
@@ -329,20 +352,33 @@ export function ViewerApp() {
 
   async function logout() {
     if (logoutState === 'pending') return
+    const started = viewerSynchronizationDecision(synchronizationState, {
+      type: 'logout-started',
+      routeKind: route.kind,
+    })
     await performViewerLogout({
       request: () => viewerRequest('/api/auth/logout', 'POST', {}),
       onStart: () => {
-        setLogoutState('pending')
+        setSynchronizationState(started.state)
         setError('')
       },
       onSuccess: () => {
-        setVideos([])
-        setAuthenticated(false)
+        const succeeded = viewerSynchronizationDecision(started.state, {
+          type: 'logout-succeeded',
+          routeKind: 'login',
+        })
+        if (succeeded.discardCachedVideos) setVideos([])
+        if (succeeded.discardAuthentication) setAuthenticated(false)
         navigate(viewerRouteUrl('login'), true)
-        setLogoutState('idle')
+        setSynchronizationState(succeeded.state)
       },
       onFailure: (message) => {
-        setLogoutState('failed')
+        setSynchronizationState(
+          viewerSynchronizationDecision(started.state, {
+            type: 'logout-failed',
+            routeKind: route.kind,
+          }).state,
+        )
         setError(message)
       },
     })

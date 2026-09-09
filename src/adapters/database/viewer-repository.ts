@@ -85,6 +85,8 @@ export async function listViewerLibraryRows(
   accountId: string,
   nowIso: string,
 ): Promise<ViewerLibraryRow[]> {
+  // Filter here to minimize disclosure and recheck at the response boundary so
+  // a future query change cannot accidentally weaken the availability contract.
   const rows = await db
     .prepare(
       `SELECT videos.public_id, videos.title, videos.description,

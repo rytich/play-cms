@@ -47,12 +47,16 @@ FROM sessions_viewer_migration_backup;
 CREATE INDEX sessions_expiry ON sessions(expires_at);
 DROP TABLE sessions_viewer_migration_backup;
 
+CREATE UNIQUE INDEX access_codes_id_video ON access_codes(id, video_id);
+
 CREATE TABLE entitlements (
   account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
   video_id TEXT NOT NULL REFERENCES videos(id) ON DELETE CASCADE,
-  source_code_id TEXT NOT NULL REFERENCES access_codes(id) ON DELETE CASCADE,
+  source_code_id TEXT NOT NULL,
   granted_at INTEGER NOT NULL,
-  PRIMARY KEY (account_id, video_id)
+  PRIMARY KEY (account_id, video_id),
+  FOREIGN KEY (source_code_id, video_id)
+    REFERENCES access_codes(id, video_id) ON DELETE CASCADE
 );
 
 CREATE INDEX entitlements_video ON entitlements(video_id);
