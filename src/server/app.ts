@@ -498,17 +498,25 @@ app.get('/api/admin/filma', async (c) => {
   const auth = await requireAdmin(c)
   if ('response' in auth) return auth.response
   const setting = await findFilmaSetting(c.env.DATABASE)
-  const configured = Boolean(
-    setting?.filma_api_key_ciphertext &&
-    setting.filma_api_key_nonce &&
-    setting.filma_verified_at !== null,
-  )
+  if (
+    !setting?.filma_api_key_ciphertext ||
+    !setting.filma_api_key_nonce ||
+    setting.filma_verified_at === null ||
+    !c.env.PLAY_ENCRYPTION_KEY
+  ) {
+    return c.json({ configured: false, verifiedAt: null })
+  }
+  try {
+    await decryptSecret(c.env.PLAY_ENCRYPTION_KEY, {
+      ciphertext: setting.filma_api_key_ciphertext,
+      nonce: setting.filma_api_key_nonce,
+    })
+  } catch {
+    return c.json({ configured: false, verifiedAt: null })
+  }
   return c.json({
-    configured,
-    verifiedAt:
-      configured && setting!.filma_verified_at !== null
-        ? new Date(setting!.filma_verified_at * 1_000).toISOString()
-        : null,
+    configured: true,
+    verifiedAt: new Date(setting.filma_verified_at * 1_000).toISOString(),
   })
 })
 

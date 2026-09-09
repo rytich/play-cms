@@ -168,6 +168,61 @@ describe('one-time viewing flow', () => {
     expect(stored?.filma_verified_at).toEqual(expect.any(Number))
   })
 
+  it('fails closed when the stored Filma key cannot be decrypted', async () => {
+    const cookie = await seedSession('admin', 'admin-filma-status')
+    const encrypted = await encryptSecret(encryptionKey, 'synthetic-filma-key')
+    await env.DATABASE.prepare(
+      `UPDATE app_settings
+       SET filma_api_key_ciphertext = ?, filma_api_key_nonce = ?,
+           filma_verified_at = 1 WHERE id = 1`,
+    )
+      .bind(encrypted.ciphertext, encrypted.nonce)
+      .run()
+    const headers = { Cookie: cookie, Origin: origin }
+    const external = vi.fn()
+    vi.stubGlobal('fetch', external)
+
+    const valid = await request('/api/admin/filma', { headers })
+    expect(valid.status).toBe(200)
+    expect(await valid.text()).toBe(
+      '{"configured":true,"verifiedAt":"1970-01-01T00:00:01.000Z"}',
+    )
+
+    const corruptedCiphertext = `${encrypted.ciphertext.slice(0, -2)}${
+      encrypted.ciphertext.endsWith('00') ? '01' : '00'
+    }`
+    await env.DATABASE.prepare(
+      `UPDATE app_settings SET filma_api_key_ciphertext = ? WHERE id = 1`,
+    )
+      .bind(corruptedCiphertext)
+      .run()
+    const corrupted = await request('/api/admin/filma', { headers })
+    expect(corrupted.status).toBe(200)
+    const corruptedBody = await corrupted.text()
+    expect(corruptedBody).toBe('{"configured":false,"verifiedAt":null}')
+    expect(corruptedBody).not.toMatch(
+      /ciphertext|nonce|plaintext|error|synthetic/i,
+    )
+
+    await env.DATABASE.prepare(
+      `UPDATE app_settings SET filma_api_key_ciphertext = ? WHERE id = 1`,
+    )
+      .bind(encrypted.ciphertext)
+      .run()
+    const rotated = await request(
+      '/api/admin/filma',
+      { headers },
+      { PLAY_ENCRYPTION_KEY: '34'.repeat(32) },
+    )
+    expect(rotated.status).toBe(200)
+    const rotatedBody = await rotated.text()
+    expect(rotatedBody).toBe('{"configured":false,"verifiedAt":null}')
+    expect(rotatedBody).not.toMatch(
+      /ciphertext|nonce|plaintext|error|synthetic/i,
+    )
+    expect(external).not.toHaveBeenCalled()
+  })
+
   it('does not call Filma or consume a code while invite playback is disabled or mismatched', async () => {
     await seedAvailableVideo()
     const external = grantFetch()
