@@ -2,7 +2,7 @@
 
 - 状態: 業務ルール承認済み、詳細設計の文書確認待ち。製品実装は未着手。
 - 作成日: 2026-09-09
-- Tracking: [Issue #28](https://github.com/rytich/play-cms/issues/28)
+- Tracking: [Issue #28](https://github.com/rytich/play-cms/issues/28) / [Draft PR #29](https://github.com/rytich/play-cms/pull/29)
 - 前提: [基本UI仕様](2026-09-08-ui-theme-navigation-design.md)、[P0設計](2026-09-07-p0-prototype-design.md)、[SECURITY.md](../../../SECURITY.md)
 - 先行実装: [Issue #24](https://github.com/rytich/play-cms/issues/24) / [PR #27](https://github.com/rytich/play-cms/pull/27)。確認時点でDraft/Open。製品実装は統合後に開始する。
 
