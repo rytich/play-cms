@@ -162,6 +162,17 @@ describe('repository contract', () => {
     expect(specification).toContain('Node.js 22.13.0以上の22.x、または24以上')
   })
 
+  it('loads local live variables only for the explicit playback contract command', async () => {
+    const packageJson = JSON.parse(await readFile('package.json', 'utf8')) as {
+      scripts: Record<string, string>
+    }
+
+    expect(packageJson.scripts['test:filma:playback:live']).toBe(
+      'node --env-file-if-exists=.dev.vars ./node_modules/vitest/vitest.mjs run --config vitest.playback-live.config.ts',
+    )
+    expect(packageJson.scripts.verify).not.toContain('.dev.vars')
+  })
+
   it('states the current unlicensed repository status without claiming open source', async () => {
     const readme = await readFile('README.md', 'utf8')
 

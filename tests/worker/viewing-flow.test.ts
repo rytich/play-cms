@@ -606,6 +606,53 @@ describe('one-time viewing flow', () => {
     ).toBe(404)
   })
 
+  it('keeps an unknown public ID generic and rejects redemption without writes or Filma', async () => {
+    await seedAvailableVideo()
+    const external = grantFetch()
+    vi.stubGlobal('fetch', external)
+    const genericShell = '<!doctype html><title>viewer</title>'
+    const publicPage = await request('/v/unknown', undefined, {
+      ASSETS: {
+        fetch: () =>
+          Promise.resolve(
+            new Response(genericShell, {
+              headers: { 'Content-Type': 'text/html; charset=utf-8' },
+            }),
+          ),
+      },
+    })
+    expect(publicPage.status).toBe(200)
+    expect(await publicPage.text()).toBe(genericShell)
+
+    const redeemed = await request('/api/public/videos/unknown/redeem', {
+      method: 'POST',
+      headers: jsonHeaders,
+      body: JSON.stringify({ code }),
+    })
+    expect(redeemed.status).toBe(404)
+    expect(await redeemed.text()).toBe('{"error":"not_found"}')
+    expect(external).not.toHaveBeenCalled()
+    expect(
+      await env.DATABASE.prepare(
+        'SELECT COUNT(*) AS count FROM redemptions',
+      ).first(),
+    ).toEqual({ count: 0 })
+    expect(
+      await env.DATABASE.prepare(
+        'SELECT COUNT(*) AS count FROM entitlements',
+      ).first(),
+    ).toEqual({ count: 0 })
+    expect(
+      await env.DATABASE.prepare(
+        `SELECT revoked_at, is_enabled,
+                EXISTS(SELECT 1 FROM redemptions WHERE code_id = access_codes.id) AS used
+         FROM access_codes WHERE id = ?`,
+      )
+        .bind(codeId)
+        .first(),
+    ).toEqual({ revoked_at: null, is_enabled: 1, used: 0 })
+  })
+
   it('allows only one winner when redemption races admin bulk and revoke', async () => {
     for (const mutation of ['bulk', 'revoke'] as const) {
       await resetDatabase()

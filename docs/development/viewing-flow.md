@@ -28,7 +28,7 @@ pnpm vitest run --config vitest.worker.config.ts tests/worker/viewing-flow.test.
 PLAYWRIGHT_MODULE_PATH=/path/to/playwright PLAYWRIGHT_CHROME_PATH=/path/to/chrome pnpm test:browser:viewing
 ```
 
-`pnpm test:filma:playback:live`は通常の`pnpm verify`に含めない手動契約テストである。専用テスト組織の`FILMA_LIVE_API_KEY`、`FILMA_LIVE_FILE_ID`、`FILMA_LIVE_NOT_FOUND_FILE_ID`、`FILMA_LIVE_INVALID_API_KEY`、`FILMA_LIVE_ALLOWED_ORIGIN`、`FILMA_LIVE_DENIED_ORIGIN`がすべて必要で、どれかがない場合はrequest前に`FILMA_LIVE_CONFIG_MISSING`で停止する。実行時はstorageの200/404/401/403と200 schema、返却URL内JWTの動画・期限、許可／拒否origin、期限後の同じgrantと`POST /filmaapi/token/refresh`を確認する。ログはstatus、真偽値、`all-conditions-passed`／`contract-denied`／`test-infrastructure-error`の分類だけとし、値、JWT、URL、response本文を出さない。
+`pnpm test:filma:playback:live`は通常の`pnpm verify`に含めない手動契約テストである。この明示コマンドだけがGit管理外の`.dev.vars`を読み込むため、`.dev.vars.example`をコピーして専用テスト値を設定するか、同じ変数をprocess environmentへexportする。通常の`pnpm verify`は`.dev.vars`を読み込まない。専用テスト組織の`FILMA_LIVE_API_KEY`、`FILMA_LIVE_FILE_ID`、`FILMA_LIVE_NOT_FOUND_FILE_ID`、`FILMA_LIVE_INVALID_API_KEY`、`FILMA_LIVE_ALLOWED_ORIGIN`、`FILMA_LIVE_DENIED_ORIGIN`がすべて必要で、どれかがない場合はrequest前に`FILMA_LIVE_CONFIG_MISSING`で停止する。実行時はstorageの200/404/401/403と200 schema、返却URL内JWTの動画・期限、許可／拒否origin、期限後の同じgrantと`POST /filmaapi/token/refresh`を確認する。ログはstatus、真偽値、`all-conditions-passed`／`contract-denied`／`test-infrastructure-error`の分類だけとし、値、JWT、URL、response本文を出さない。
 
 合成Worker境界試験では、grant失敗時のredemption・entitlementが0件でコード状態が不変であること、既存メールへの登録失敗時に匿名権利が残ること、draft・公開前・終了時刻ちょうど・期限切れ・不明IDをpublic page、redeem、anonymous playback、library、viewer playbackで確認する。補助ブラウザ試験は`/admin/filma`のdirect openに加えてreloadとback/forward復元も確認する。
 

@@ -20,7 +20,7 @@
     "test:worker": "vitest run --config vitest.worker.config.ts",
     "db:migrate:local": "wrangler d1 migrations apply play-cms-local --local",
     "test:filma:live": "node --env-file-if-exists=.dev.vars ./node_modules/vitest/vitest.mjs run --config vitest.live.config.ts",
-    "test:filma:playback:live": "vitest run --config vitest.playback-live.config.ts",
+    "test:filma:playback:live": "node --env-file-if-exists=.dev.vars ./node_modules/vitest/vitest.mjs run --config vitest.playback-live.config.ts",
     "typecheck": "tsc --noEmit",
     "verify": "pnpm lint && pnpm typecheck && pnpm test && pnpm test:worker && pnpm build:verify && pnpm format:check"
   },
