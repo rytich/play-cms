@@ -425,9 +425,7 @@ function VideosPage({
               ) : (
                 <a href={adminVideosUrl(Math.max(0, offset - 100))}>前へ</a>
               )}
-              <span>
-                {offset + 1}件目から{videos.length}件
-              </span>
+              <span>{videoListRangeLabel(offset, videos.length)}</span>
               {videos.length < 100 ? (
                 <span className="pager-disabled" aria-disabled="true">
                   次へ

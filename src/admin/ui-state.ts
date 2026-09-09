@@ -52,5 +52,5 @@ export function videoListRangeLabel(offset: number, count: number): string {
   if (count === 0) return '0件を表示'
   const first = offset + 1
   const last = offset + count
-  return first === last ? `${first}件目を表示` : `${first}〜${last}件目を表示`
+  return `${first}件目〜${last}件目（${count}件）`
 }
