@@ -4,7 +4,7 @@ export type Video = Readonly<{
   filmaFileId: string
   title: string
   description: string
-  status: 'draft'
+  status: 'draft' | 'published'
   startsAt: string
   endsAt: string
 }>

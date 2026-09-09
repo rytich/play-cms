@@ -1,57 +1,114 @@
-import { parseOffset } from '../core/admin'
+import {
+  codeFiltersParams,
+  emptyCodeFilters,
+  emptyVideoFilters,
+  parseCodeFilters,
+  parseVideoFilters,
+  videoFiltersParams,
+  type CodeFilters,
+  type VideoFilters,
+} from '../core/admin-management'
 
 export type AdminRoute =
   | { kind: 'setup' }
   | { kind: 'login'; returnTo: string }
-  | { kind: 'videos'; offset: number }
+  | { kind: 'videos'; offset: number; filters: VideoFilters }
   | { kind: 'new-video'; returnTo: string }
   | { kind: 'edit-video'; videoId: string; returnTo: string }
-  | { kind: 'video-codes'; videoId: string; returnTo: string }
+  | {
+      kind: 'video-codes'
+      videoId: string
+      returnTo: string
+      codeFilters: CodeFilters
+    }
   | { kind: 'not-found' }
 
-function offsetFromSearch(search: string): number | null {
-  const params = new URLSearchParams(search)
-  const rawOffset = params.get('offset')
-  return parseOffset(rawOffset === null ? undefined : rawOffset)
+const videoKeys = ['q', 'status', 'from', 'to', 'offset'] as const
+const codeKeys = [
+  'codeId',
+  'setting',
+  'lifecycle',
+  'issuedFrom',
+  'issuedTo',
+  'codesOffset',
+] as const
+
+function normalizedVideoFilters(value: number | VideoFilters): VideoFilters {
+  return typeof value === 'number'
+    ? { ...emptyVideoFilters, offset: value }
+    : value
 }
 
-export function adminVideosUrl(offset = 0): string {
-  return offset === 0 ? '/admin/videos' : `/admin/videos?offset=${offset}`
+function withSearch(path: string, params: URLSearchParams) {
+  const search = params.toString()
+  return search ? `${path}?${search}` : path
 }
 
-export function adminVideoEditUrl(videoId: string, offset = 0): string {
-  return `/admin/videos/${encodeURIComponent(videoId)}/edit${
-    offset === 0 ? '' : `?offset=${offset}`
-  }`
+export function adminVideosUrl(value: number | VideoFilters = 0): string {
+  return withSearch(
+    '/admin/videos',
+    videoFiltersParams(normalizedVideoFilters(value)),
+  )
 }
 
-export function adminVideoCodesUrl(videoId: string, offset = 0): string {
-  return `/admin/videos/${encodeURIComponent(videoId)}/codes${
-    offset === 0 ? '' : `?offset=${offset}`
-  }`
+export function adminVideoEditUrl(
+  videoId: string,
+  value: number | VideoFilters = 0,
+): string {
+  return withSearch(
+    `/admin/videos/${encodeURIComponent(videoId)}/edit`,
+    videoFiltersParams(normalizedVideoFilters(value)),
+  )
+}
+
+export function adminVideoCodesUrl(
+  videoId: string,
+  value: number | VideoFilters = 0,
+  codeFilters: CodeFilters = emptyCodeFilters,
+): string {
+  const params = videoFiltersParams(normalizedVideoFilters(value))
+  for (const [key, item] of codeFiltersParams(codeFilters))
+    params.set(key, item)
+  return withSearch(
+    `/admin/videos/${encodeURIComponent(videoId)}/codes`,
+    params,
+  )
 }
 
 export function adminLoginUrl(returnTo: string): string {
-  return `/admin/login?returnTo=${encodeURIComponent(
-    safeAdminReturnTo(returnTo),
-  )}`
+  return `/admin/login?returnTo=${encodeURIComponent(safeAdminReturnTo(returnTo))}`
+}
+
+function decodeVideoId(pathname: string) {
+  const match = /^\/admin\/videos\/([^/]+)\/(edit|codes)$/.exec(pathname)
+  if (!match) return null
+  try {
+    const videoId = decodeURIComponent(match[1]!)
+    return !videoId || videoId.includes('/')
+      ? null
+      : { videoId, page: match[2] as 'edit' | 'codes' }
+  } catch {
+    return null
+  }
 }
 
 function videoRoute(pathname: string, search: string): AdminRoute | null {
-  const match = /^\/admin\/videos\/([^/]+)\/(edit|codes)$/.exec(pathname)
+  const match = decodeVideoId(pathname)
   if (!match) return null
-  let videoId: string
-  try {
-    videoId = decodeURIComponent(match[1]!)
-  } catch {
-    return { kind: 'not-found' }
+  const params = new URLSearchParams(search)
+  const videoFilters = parseVideoFilters(
+    params,
+    match.page === 'codes' ? codeKeys : [],
+  )
+  if (!videoFilters) return { kind: 'not-found' }
+  const returnTo = adminVideosUrl(videoFilters)
+  if (match.page === 'edit') {
+    return { kind: 'edit-video', videoId: match.videoId, returnTo }
   }
-  if (!videoId || videoId.includes('/')) return { kind: 'not-found' }
-  const offset = offsetFromSearch(search)
-  if (offset === null) return { kind: 'not-found' }
-  return match[2] === 'edit'
-    ? { kind: 'edit-video', videoId, returnTo: adminVideosUrl(offset) }
-    : { kind: 'video-codes', videoId, returnTo: adminVideosUrl(offset) }
+  const codeFilters = parseCodeFilters(params, 'codesOffset', videoKeys)
+  return codeFilters
+    ? { kind: 'video-codes', videoId: match.videoId, returnTo, codeFilters }
+    : { kind: 'not-found' }
 }
 
 export function parseAdminRoute(pathname: string, search: string): AdminRoute {
@@ -60,14 +117,12 @@ export function parseAdminRoute(pathname: string, search: string): AdminRoute {
     const returnTo = new URLSearchParams(search).get('returnTo')
     return { kind: 'login', returnTo: safeAdminReturnTo(returnTo) }
   }
-  const offset = offsetFromSearch(search)
-  if (pathname === '/admin/videos') {
-    return offset === null ? { kind: 'not-found' } : { kind: 'videos', offset }
-  }
-  if (pathname === '/admin/videos/new') {
-    return offset === null
-      ? { kind: 'not-found' }
-      : { kind: 'new-video', returnTo: adminVideosUrl(offset) }
+  if (pathname === '/admin/videos' || pathname === '/admin/videos/new') {
+    const filters = parseVideoFilters(new URLSearchParams(search))
+    if (!filters) return { kind: 'not-found' }
+    return pathname === '/admin/videos'
+      ? { kind: 'videos', offset: filters.offset, filters }
+      : { kind: 'new-video', returnTo: adminVideosUrl(filters) }
   }
   return videoRoute(pathname, search) ?? { kind: 'not-found' }
 }
@@ -83,23 +138,25 @@ export function safeAdminReturnTo(value: string | null): string {
     return adminVideosUrl()
   }
   if (url.origin !== 'http://play-cms.local') return adminVideosUrl()
-  if (!url.pathname.startsWith('/admin/videos')) return adminVideosUrl()
   const route = parseAdminRoute(url.pathname, url.search)
-  if (route.kind === 'videos') return adminVideosUrl(route.offset)
+  if (route.kind === 'videos') return adminVideosUrl(route.filters)
   if (route.kind === 'new-video') {
-    return `/admin/videos/new${
-      route.returnTo === '/admin/videos'
-        ? ''
-        : `?${new URL(route.returnTo, url).searchParams.toString()}`
-    }`
+    return withSearch(
+      '/admin/videos/new',
+      new URL(route.returnTo, url).searchParams,
+    )
   }
   if (route.kind === 'edit-video') {
-    const offset = offsetFromSearch(url.search) ?? 0
-    return adminVideoEditUrl(route.videoId, offset)
+    const filters = parseVideoFilters(new URLSearchParams(url.search))
+    return filters
+      ? adminVideoEditUrl(route.videoId, filters)
+      : adminVideosUrl()
   }
   if (route.kind === 'video-codes') {
-    const offset = offsetFromSearch(url.search) ?? 0
-    return adminVideoCodesUrl(route.videoId, offset)
+    const filters = parseVideoFilters(new URLSearchParams(url.search), codeKeys)
+    return filters
+      ? adminVideoCodesUrl(route.videoId, filters, route.codeFilters)
+      : adminVideosUrl()
   }
   return adminVideosUrl()
 }

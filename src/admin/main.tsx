@@ -10,6 +10,12 @@ import type { FormEvent, MouseEvent, ReactNode } from 'react'
 import { createRoot } from 'react-dom/client'
 
 import type { Video } from '../core/admin'
+import {
+  codeFiltersParams,
+  parseVideoFilters,
+  videoFiltersParams,
+  type VideoFilters,
+} from '../core/admin-management'
 import { brand, isBrandAssetPath } from '../ui/brand'
 import { AdminLayout } from '../ui/layouts/AdminLayout'
 import { AuthLayout } from '../ui/layouts/AuthLayout'
@@ -37,11 +43,14 @@ import {
   isVideoFormDirty,
   revokeCodeConfirmation,
   shouldWarnBeforeUnload,
+  unknownOutcomeAdvice,
   videoDateRangeError,
   videoListRangeLabel,
   type VideoFormValues,
 } from './ui-state'
 import { VideoDateFields } from './VideoDateFields'
+import { BulkActions } from './BulkActions'
+import { CodeListFilters, VideoListFilters } from './ListFilters'
 import './styles.css'
 
 type CodeMetadata = {
@@ -49,6 +58,7 @@ type CodeMetadata = {
   createdAt: string
   revokedAt: string | null
   status: 'unused' | 'revoked'
+  enabled: boolean
 }
 
 type ProtectedPageProps = {
@@ -322,36 +332,101 @@ function ProtectedLayout({
 function VideosPage({
   onLogout,
   onUnauthorized,
-  offset,
-}: ProtectedPageProps & { offset: number }) {
+  filters,
+}: ProtectedPageProps & { filters: VideoFilters }) {
+  const { offset } = filters
   const [videos, setVideos] = useState<Video[]>([])
+  const [hasMore, setHasMore] = useState(false)
+  const [selected, setSelected] = useState<Set<string>>(new Set())
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [resultMessage, setResultMessage] = useState('')
+  const [busy, setBusy] = useState(false)
   const heading = usePageHeading('動画一覧')
 
-  useEffect(() => {
-    let active = true
+  const load = useCallback(async () => {
     setLoading(true)
-    adminRequest<{ videos: Video[] }>(`/api/admin/videos?offset=${offset}`)
-      .then((result) => {
-        if (active) setVideos(result.videos)
-      })
-      .catch((caught) => {
-        if (!active) return
-        if (caught instanceof AdminRequestError && caught.status === 401) {
-          setVideos([])
-          onUnauthorized()
-          return
-        }
+    setError('')
+    try {
+      const params = videoFiltersParams(filters)
+      const result = await adminRequest<{ videos: Video[]; hasMore: boolean }>(
+        `/api/admin/videos?${params.toString()}`,
+      )
+      setVideos(result.videos)
+      setHasMore(result.hasMore)
+      return result.videos
+    } catch (caught) {
+      if (caught instanceof AdminRequestError && caught.status === 401) {
+        setVideos([])
+        setSelected(new Set())
+        onUnauthorized()
+      } else {
         setError(visibleError(caught))
-      })
-      .finally(() => {
-        if (active) setLoading(false)
-      })
-    return () => {
-      active = false
+      }
+      return null
+    } finally {
+      setLoading(false)
     }
-  }, [offset, onUnauthorized])
+  }, [filters, onUnauthorized])
+
+  useEffect(() => {
+    setSelected(new Set())
+    void load()
+  }, [load])
+
+  function toggle(id: string) {
+    setSelected((current) => {
+      const next = new Set(current)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  async function bulkStatus(published: boolean) {
+    if (selected.size === 0 || busy) return
+    const label = published ? '公開設定' : '非公開'
+    if (
+      !window.confirm(
+        `${selected.size}件の動画を${label}にします。タイトルや期間は変更しません。`,
+      )
+    )
+      return
+    setBusy(true)
+    setError('')
+    setResultMessage('')
+    try {
+      const result = await adminRequest<{
+        changedCount: number
+        unchangedCount: number
+      }>('/api/admin/videos/bulk-status', 'POST', {
+        ids: [...selected],
+        status: published ? 'published' : 'draft',
+      })
+      setSelected(new Set())
+      setResultMessage(
+        `${result.changedCount}件を変更し、${result.unchangedCount}件は変更不要でした。`,
+      )
+      const refreshed = await load()
+      if (refreshed?.length === 0 && offset > 0) {
+        window.location.replace(adminVideosUrl({ ...filters, offset: 0 }))
+      }
+    } catch (caught) {
+      if (caught instanceof AdminRequestError && caught.status === 401) {
+        setVideos([])
+        setSelected(new Set())
+        onUnauthorized()
+      } else {
+        setError(visibleError(caught))
+      }
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const allSelected =
+    videos.length > 0 && videos.every((video) => selected.has(video.id))
+  const partlySelected = selected.size > 0 && !allSelected
 
   return (
     <ProtectedLayout onLogout={onLogout} onUnauthorized={onUnauthorized}>
@@ -365,15 +440,22 @@ function VideosPage({
               {loading
                 ? '100件ずつ読み込みます。'
                 : `${videoListRangeLabel(offset, videos.length)}。`}{' '}
-              日時は{displayTimeZone}で表示します。すべて未検証の下書きです。
+              日時は{displayTimeZone}
+              で表示します。公開設定済みでも実配信は停止中です。
             </p>
           </div>
           <a
             className="button-link"
-            href={`/admin/videos/new${offset === 0 ? '' : `?offset=${offset}`}`}
+            href={adminVideosUrl(filters).replace(
+              '/admin/videos',
+              '/admin/videos/new',
+            )}
           >
             動画を登録
           </a>
+        </div>
+        <div className="card filter-card">
+          <VideoListFilters action="/admin/videos" filters={filters} />
         </div>
         <div className="card">
           {loading ? (
@@ -383,38 +465,93 @@ function VideosPage({
           ) : error ? (
             <div className="error-state" role="alert">
               <p>{error}</p>
+              <p>{unknownOutcomeAdvice}</p>
               <button type="button" onClick={() => window.location.reload()}>
                 再読み込み
               </button>
             </div>
           ) : videos.length === 0 ? (
             <div className="empty-state">
-              <h2>登録済みの動画はありません</h2>
-              <p>「動画を登録」から未検証の下書きを追加できます。</p>
+              <h2>条件に一致する動画はありません</h2>
+              <p>検索条件を変更するか、動画を登録してください。</p>
             </div>
           ) : (
-            <ul className="video-list">
-              {videos.map((video) => (
-                <li key={video.id}>
-                  <div className="video-summary">
-                    <div>
-                      <strong>{video.title}</strong>
-                      <span className="status-badge">未検証の下書き</span>
-                    </div>
-                    <dl>
+            <>
+              <div className="select-page">
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={allSelected}
+                    ref={(node) => {
+                      if (node) node.indeterminate = partlySelected
+                    }}
+                    onChange={() =>
+                      setSelected(
+                        allSelected
+                          ? new Set()
+                          : new Set(videos.map((video) => video.id)),
+                      )
+                    }
+                  />
+                  現ページの{videos.length}件を選択
+                </label>
+              </div>
+              <BulkActions
+                kind="videos"
+                selectedCount={selected.size}
+                busy={busy}
+                onTarget={(target) => void bulkStatus(target)}
+              />
+              {resultMessage && (
+                <p className="success" role="status">
+                  {resultMessage}
+                </p>
+              )}
+              {error && (
+                <div className="error" role="alert">
+                  <p>{error}</p>
+                  <p>{unknownOutcomeAdvice}</p>
+                </div>
+              )}
+              <ul className="video-list selectable-list">
+                {videos.map((video) => (
+                  <li key={video.id}>
+                    <input
+                      type="checkbox"
+                      aria-label={`動画「${video.title}」を選択`}
+                      checked={selected.has(video.id)}
+                      disabled={busy}
+                      onChange={() => toggle(video.id)}
+                    />
+                    <div className="video-summary">
                       <div>
-                        <dt>公開期間</dt>
-                        <dd>
-                          {new Date(video.startsAt).toLocaleString('ja-JP')}〜
-                          {new Date(video.endsAt).toLocaleString('ja-JP')}
-                        </dd>
+                        <strong>{video.title}</strong>
+                        <span className="status-badge">
+                          {video.status === 'published'
+                            ? '公開設定済み'
+                            : '非公開'}
+                        </span>
                       </div>
-                    </dl>
-                    <a href={adminVideoEditUrl(video.id, offset)}>編集</a>
-                  </div>
-                </li>
-              ))}
-            </ul>
+                      <dl>
+                        <div>
+                          <dt>公開期間</dt>
+                          <dd>
+                            {new Date(video.startsAt).toLocaleString('ja-JP')}〜
+                            {new Date(video.endsAt).toLocaleString('ja-JP')}
+                          </dd>
+                        </div>
+                      </dl>
+                      <div className="row-actions">
+                        <a href={adminVideoEditUrl(video.id, filters)}>編集</a>
+                        <a href={adminVideoCodesUrl(video.id, filters)}>
+                          閲覧用キー
+                        </a>
+                      </div>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </>
           )}
           {!loading && !error && (
             <nav className="pager" aria-label="動画一覧のページ送り">
@@ -423,15 +560,24 @@ function VideosPage({
                   前へ
                 </span>
               ) : (
-                <a href={adminVideosUrl(Math.max(0, offset - 100))}>前へ</a>
+                <a
+                  href={adminVideosUrl({
+                    ...filters,
+                    offset: Math.max(0, offset - 100),
+                  })}
+                >
+                  前へ
+                </a>
               )}
               <span>{videoListRangeLabel(offset, videos.length)}</span>
-              {videos.length < 100 ? (
+              {!hasMore ? (
                 <span className="pager-disabled" aria-disabled="true">
                   次へ
                 </span>
               ) : (
-                <a href={adminVideosUrl(offset + 100)}>次へ</a>
+                <a href={adminVideosUrl({ ...filters, offset: offset + 100 })}>
+                  次へ
+                </a>
               )}
             </nav>
           )}
@@ -443,23 +589,23 @@ function VideosPage({
 
 function VideoTabs({
   videoId,
-  offset,
+  filters,
   current,
 }: {
   videoId: string
-  offset: number
+  filters: VideoFilters
   current: 'edit' | 'codes'
 }) {
   return (
     <nav className="video-tabs" aria-label="動画の設定">
       <a
-        href={adminVideoEditUrl(videoId, offset)}
+        href={adminVideoEditUrl(videoId, filters)}
         aria-current={current === 'edit' ? 'page' : undefined}
       >
         基本情報
       </a>
       <a
-        href={adminVideoCodesUrl(videoId, offset)}
+        href={adminVideoCodesUrl(videoId, filters)}
         aria-current={current === 'codes' ? 'page' : undefined}
       >
         閲覧用キー
@@ -476,11 +622,10 @@ function VideoEditorPage({
   route: Extract<AdminRoute, { kind: 'new-video' | 'edit-video' }>
 }) {
   const isNew = route.kind === 'new-video'
-  const offset = Number(
-    new URL(route.returnTo, window.location.origin).searchParams.get(
-      'offset',
-    ) ?? 0,
-  )
+  const returnFilters = parseVideoFilters(
+    new URL(route.returnTo, window.location.origin).searchParams,
+  ) ?? { q: '', status: null, from: null, to: null, offset: 0 }
+  const offset = returnFilters.offset
   const [video, setVideo] = useState<Video | null>(null)
   const [form, setForm] = useState<VideoFormValues>(emptyVideoForm)
   const [savedForm, setSavedForm] = useState<VideoFormValues>(emptyVideoForm)
@@ -630,7 +775,7 @@ function VideoEditorPage({
         </a>
       </div>
       {!isNew && video && (
-        <VideoTabs videoId={video.id} offset={offset} current="edit" />
+        <VideoTabs videoId={video.id} filters={returnFilters} current="edit" />
       )}
       <div className="card editor-card">
         <form onSubmit={(event) => void saveVideo(event)}>
@@ -727,18 +872,20 @@ function VideoCodesPage({
 }: ProtectedPageProps & {
   route: Extract<AdminRoute, { kind: 'video-codes' }>
 }) {
-  const offset = Number(
-    new URL(route.returnTo, window.location.origin).searchParams.get(
-      'offset',
-    ) ?? 0,
-  )
+  const videoFilters = parseVideoFilters(
+    new URL(route.returnTo, window.location.origin).searchParams,
+  ) ?? { q: '', status: null, from: null, to: null, offset: 0 }
+  const { codeFilters } = route
   const [video, setVideo] = useState<Video | null>(null)
   const [codes, setCodes] = useState<CodeMetadata[]>([])
+  const [hasMore, setHasMore] = useState(false)
+  const [selected, setSelected] = useState<Set<string>>(new Set())
   const [issuedCode, setIssuedCode] = useState<string | null>(null)
   const [copyStatus, setCopyStatus] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  const [resultMessage, setResultMessage] = useState('')
   const heading = usePageHeading('閲覧用キー')
   const selectedVideoId = useRef(route.videoId)
 
@@ -747,6 +894,7 @@ function VideoCodesPage({
     setCodes([])
     setIssuedCode(null)
     setCopyStatus('')
+    setSelected(new Set())
   }, [])
 
   const handleError = useCallback(
@@ -769,20 +917,25 @@ function VideoCodesPage({
         adminRequest<{ video: Video }>(
           `/api/admin/videos/${encodeURIComponent(route.videoId)}`,
         ),
-        adminRequest<{ codes: CodeMetadata[] }>(
-          `/api/admin/videos/${encodeURIComponent(route.videoId)}/codes`,
+        adminRequest<{ codes: CodeMetadata[]; hasMore: boolean }>(
+          `/api/admin/videos/${encodeURIComponent(route.videoId)}/codes?${codeFiltersParams(
+            codeFilters,
+            'offset',
+          ).toString()}`,
         ),
       ])
       setVideo(videoResult.video)
       setCodes(codeResult.codes)
+      setHasMore(codeResult.hasMore)
     } catch (caught) {
       handleError(caught)
     } finally {
       setLoading(false)
     }
-  }, [handleError, route.videoId])
+  }, [codeFilters, handleError, route.videoId])
 
   useEffect(() => {
+    setSelected(new Set())
     void load()
   }, [load])
 
@@ -864,6 +1017,47 @@ function VideoCodesPage({
     }
   }
 
+  async function bulkCodeStatus(enabled: boolean) {
+    if (selected.size === 0 || busy) return
+    const action = enabled ? '有効' : '無効'
+    const impact = enabled
+      ? '未使用キーの引換設定を再開します。'
+      : '付与済みの視聴権は消しません。'
+    if (
+      !window.confirm(`${selected.size}件のキーを${action}にします。${impact}`)
+    )
+      return
+    setBusy(true)
+    setError('')
+    setResultMessage('')
+    setIssuedCode(null)
+    try {
+      const result = await adminRequest<{
+        changedCount: number
+        unchangedCount: number
+      }>(
+        `/api/admin/videos/${encodeURIComponent(route.videoId)}/codes/bulk-status`,
+        'POST',
+        { ids: [...selected], enabled },
+      )
+      setSelected(new Set())
+      setResultMessage(
+        `${result.changedCount}件を変更し、${result.unchangedCount}件は変更不要でした。`,
+      )
+      await load()
+    } catch (caught) {
+      handleError(caught)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const eligibleCodes = codes.filter((code) => code.status === 'unused')
+  const allSelected =
+    eligibleCodes.length > 0 &&
+    eligibleCodes.every((code) => selected.has(code.id))
+  const partlySelected = selected.size > 0 && !allSelected
+
   return (
     <ProtectedLayout
       returnTo={route.returnTo}
@@ -895,7 +1089,19 @@ function VideoCodesPage({
             </div>
             <a href={route.returnTo}>動画一覧へ戻る</a>
           </div>
-          <VideoTabs videoId={video.id} offset={offset} current="codes" />
+          <VideoTabs
+            videoId={video.id}
+            filters={videoFilters}
+            current="codes"
+          />
+          <div className="card filter-card">
+            <CodeListFilters
+              action={`/admin/videos/${encodeURIComponent(video.id)}/codes`}
+              resetHref={adminVideoCodesUrl(video.id, videoFilters)}
+              videoFilters={videoFilters}
+              filters={codeFilters}
+            />
+          </div>
           <div className="card">
             <div className="section-heading">
               <div>
@@ -941,9 +1147,7 @@ function VideoCodesPage({
             {error && (
               <div className="error" role="alert">
                 <p>{error}</p>
-                <p>
-                  自動で再発行しません。履歴を再取得して状態を確認してください。
-                </p>
+                <p>{unknownOutcomeAdvice}</p>
                 <button
                   type="button"
                   className="secondary"
@@ -953,16 +1157,68 @@ function VideoCodesPage({
                 </button>
               </div>
             )}
+            <div className="select-page">
+              <label>
+                <input
+                  type="checkbox"
+                  checked={allSelected}
+                  ref={(node) => {
+                    if (node) node.indeterminate = partlySelected
+                  }}
+                  disabled={eligibleCodes.length === 0 || busy}
+                  onChange={() =>
+                    setSelected(
+                      allSelected
+                        ? new Set()
+                        : new Set(eligibleCodes.map((code) => code.id)),
+                    )
+                  }
+                />
+                現ページの変更可能な{eligibleCodes.length}件を選択
+              </label>
+            </div>
+            <BulkActions
+              kind="codes"
+              selectedCount={selected.size}
+              busy={busy}
+              enableDisabled={Date.parse(video.endsAt) <= Date.now()}
+              onTarget={(target) => void bulkCodeStatus(target)}
+            />
+            {Date.parse(video.endsAt) <= Date.now() && (
+              <p className="subtle">
+                期間終了済みのためキーを再有効化できません。
+              </p>
+            )}
+            {resultMessage && (
+              <p className="success" role="status">
+                {resultMessage}
+              </p>
+            )}
             {codes.length === 0 ? (
               <p className="empty">発行履歴はありません。</p>
             ) : (
-              <ul className="code-list">
+              <ul className="code-list selectable-list">
                 {codes.map((code) => (
                   <li key={code.id}>
+                    <input
+                      type="checkbox"
+                      aria-label={`閲覧用キーID ${code.id} を選択`}
+                      checked={selected.has(code.id)}
+                      disabled={code.status !== 'unused' || busy}
+                      onChange={() =>
+                        setSelected((current) => {
+                          const next = new Set(current)
+                          if (next.has(code.id)) next.delete(code.id)
+                          else next.add(code.id)
+                          return next
+                        })
+                      }
+                    />
                     <div>
                       <strong>
                         {code.status === 'unused' ? '未使用' : '取消済み'}
                       </strong>
+                      <span>{code.enabled ? '設定: 有効' : '設定: 無効'}</span>
                       <span>
                         {new Date(code.createdAt).toLocaleString('ja-JP')}
                       </span>
@@ -982,6 +1238,42 @@ function VideoCodesPage({
                 ))}
               </ul>
             )}
+            <p className="subtle">
+              使用済みは引換機能未実装のため現在0件です。実引換・視聴権は未実装です。
+            </p>
+            <nav className="pager" aria-label="閲覧用キー一覧のページ送り">
+              {codeFilters.offset === 0 ? (
+                <span className="pager-disabled" aria-disabled="true">
+                  前へ
+                </span>
+              ) : (
+                <a
+                  href={adminVideoCodesUrl(video.id, videoFilters, {
+                    ...codeFilters,
+                    offset: Math.max(0, codeFilters.offset - 100),
+                  })}
+                >
+                  前へ
+                </a>
+              )}
+              <span>
+                {videoListRangeLabel(codeFilters.offset, codes.length)}
+              </span>
+              {hasMore ? (
+                <a
+                  href={adminVideoCodesUrl(video.id, videoFilters, {
+                    ...codeFilters,
+                    offset: codeFilters.offset + 100,
+                  })}
+                >
+                  次へ
+                </a>
+              ) : (
+                <span className="pager-disabled" aria-disabled="true">
+                  次へ
+                </span>
+              )}
+            </nav>
           </div>
         </section>
       ) : null}
@@ -1133,7 +1425,7 @@ function App() {
 
   const common = { onLogout: () => void logout(), onUnauthorized }
   if (route.kind === 'videos') {
-    return <VideosPage {...common} offset={route.offset} />
+    return <VideosPage {...common} filters={route.filters} />
   }
   if (route.kind === 'new-video' || route.kind === 'edit-video') {
     return <VideoEditorPage {...common} route={route} />

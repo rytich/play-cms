@@ -9,6 +9,7 @@ export const errorBody = {
   unauthorized: { error: 'unauthorized' },
   notFound: { error: 'not_found' },
   rateLimited: { error: 'rate_limited' },
+  conflict: { error: 'conflict' },
   unavailable: { error: 'unavailable' },
 } as const
 

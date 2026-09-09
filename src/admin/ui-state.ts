@@ -54,3 +54,18 @@ export function videoListRangeLabel(offset: number, count: number): string {
   const last = offset + count
   return `${first}件目〜${last}件目（${count}件）`
 }
+
+export function selectionAfterContextChange(
+  selectedIds: readonly string[],
+  currentContext: string,
+  nextContext: string,
+): string[] {
+  return currentContext === nextContext ? [...selectedIds] : []
+}
+
+export function canSubmitBulk(selectedIds: readonly string[], busy: boolean) {
+  return selectedIds.length > 0 && !busy
+}
+
+export const unknownOutcomeAdvice =
+  '処理結果が不明な場合は自動再送せず、状態を再取得して確認してください。'

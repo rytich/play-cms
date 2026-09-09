@@ -2,7 +2,7 @@
 
 > 実装は既存の5.6 Sol担当一体が、TDDと段階ごとの検証で進める。新しい実装担当は起動しない。
 
-- 状態: 計画保存。製品実装はPR #27の受入完了・knrytによる統合待ち。
+- 状態: 実装・合成検証122件成功。独立レビューとknrytによる統合待ち（2026-09-09）。
 - Tracking: [Issue #28](https://github.com/rytich/play-cms/issues/28) / [PR #29](https://github.com/rytich/play-cms/pull/29)
 - Goal: 動画・閲覧キーを100件ずつ検索・選択し、動画の公開設定と未使用キーの有効設定を安全に一括変更できる。
 - Architecture: 既存React画面、Hono管理API、D1 repositoryを拡張する。URLを一覧条件の正本とし、専用APIが最大100件を原子的に処理する。
@@ -20,6 +20,7 @@
 - 使用済み・永久取消済みキーは復活させない。有効/無効は未使用キーの引換設定で、付与済み視聴権は消さない。引換・視聴権の実装は別工程。
 - 生キー・認証情報・メール・選択ID群をURL/履歴state/永続ストレージ/ログへ保存しない。確定した検索条件だけURL保存する。
 - 変更は全件成功または全件未変更。通信断・DB障害による成否不明を成功やロールバック済みと断定せず、自動再実行しない。
+- 実BFCache復帰・実200%拡大はユーザー承認済みの公開前必須[Issue #30](https://github.com/rytich/play-cms/issues/30)へ集約する。本Taskでも未確認を成功扱いにせず、ローカル統合と外部公開の条件を分ける。
 
 ## ファイルと境界
 
@@ -90,8 +91,8 @@ type BulkResult = { changedCount: number; unchangedCount: number }
 
 **Files:** 上表。コード/TDDは5.6 Solのみ。各Stepは同じTask #28の小ステップであり、追加の実装エージェントやPRには分割しない。
 
-- [ ] **Step 1: 先行統合と基準の固定。** #27のmerge SHA、Issue #24終了、最新develop、作業treeの変更有無を記録する。#29ブランチを同期して基準SHAを固定。既存合成設定の`pnpm verify`で開始点を確認する。
-- [ ] **Step 2: 入力とURLのRED。** 次表の単体試験を追加し、未実装関数・不足した拒否条件で失敗することを確認。既存の正規化と内部戻り先検証を流用して最小実装する。
+- [x] **Step 1: 先行統合と基準の固定。** PR #27のknrytによるmerge `9c4b1c8b8d06658a0083246e26082233111bb1f7`とIssue #24終了を確認。既存の隔離worktreeをIssue #28ブランチへ切り替えて再利用し、origin/develop同期後の基準を`36936101391eb0025301d2a1283f15862e078dd1`へ固定した。変更なしの状態から既存合成設定の`pnpm verify`を実行し、Node69/69・Worker27/27、lint/typecheck/build/format成功。
+- [x] **Step 2: 入力とURLのRED。** 次表の単体試験を追加し、未実装関数・不足した拒否条件で失敗することを確認。既存の正規化と内部戻り先検証を流用して最小実装する。
 
 | 試験                                      | 期待                                         |
 | ----------------------------------------- | -------------------------------------------- |
@@ -104,14 +105,14 @@ type BulkResult = { changedCount: number; unchangedCount: number }
 
 実行: `pnpm exec vitest run --config vitest.config.ts tests/unit/admin-management.test.ts tests/unit/admin-routes.test.ts tests/unit/admin-ui-state.test.ts`。RED理由とGREEN件数を記録する。
 
-- [ ] **Step 3: 合成DBの移行RED→GREEN。** 0001だけを適用した別fixtureに複数動画と有効/取消済みキーを作る。既存テストsetupが全migrationを自動適用する点を避け、専用合成bindingまたは同等の隔離を使う。移行後の全列照合、外部キー/ユニーク/CHECK/索引、追加published保存、is_enabled既定値を確認する。途中失敗のロールバックも確認。ローカルWranglerのmigration適用経路でも検証する。失敗したらこのStepで止め、既存データへ試さない。
-- [ ] **Step 4: 一覧と一括APIのRED→GREEN。** 1001件fixture、絞り込みAND、同時刻ソート、100件ちょうどと最終1件、入力/auth/Origin/16 KiB/レート制限、404/409全件未変更、再操作の変更不要件数、単件取消との競合を先にテストする。repositoryとAPIを実装。100件成功でbind上限に収まることを実D1互換Worker試験で確認する。
+- [x] **Step 3: 合成DBの移行RED→GREEN。** 0001だけを適用した別fixtureに複数動画と有効/取消済みキーを作る。既存テストsetupが全migrationを自動適用する点を避け、専用合成bindingまたは同等の隔離を使う。移行後の全列照合、外部キー/ユニーク/CHECK/索引、追加published保存、is_enabled既定値を確認する。途中失敗のロールバックも確認。ローカルWranglerのmigration適用経路でも検証する。失敗したらこのStepで止め、既存データへ試さない。
+- [x] **Step 4: 一覧と一括APIのRED→GREEN。** 1001件fixture、絞り込みAND、同時刻ソート、100件ちょうどと最終1件、入力/auth/Origin/16 KiB/レート制限、404/409全件未変更、再操作の変更不要件数、単件取消との競合を先にテストする。repositoryとAPIを実装。100件成功でbind上限に収まることを実D1互換Worker試験で確認する。
 
 実行: `pnpm exec vitest run --config vitest.worker.config.ts tests/worker/admin-management.test.ts tests/worker/admin-migration.test.ts tests/worker/admin-api.test.ts`。元schemaの試験で開発者の秘密やDBを読み込まない。
 
-- [ ] **Step 5: 最小UIを接続。** 検索フォーム、リセット、100行、各行と現ページの選択、件数、二つの明示目標ボタン、確認、結果を既存URL別画面へ組み込む。設定と利用状態を別表示し、公開設定済みでも実配信停止と表示。対象IDが選択されたと分かるラベル、indeterminate、キーボード/フォーカス/通知を付ける。結果不明は再取得のみを案内し、自動再送しない。
-- [ ] **Step 6: 隔離ブラウザで受入。** 動画1001件・一動画キー1001件を別ポートに用意する。検索→複数選択→確認中止/実行→一覧更新、100件一括、動画公開/非公開、キー無効/有効、取消済み選択不可、終了時刻拒否、検索結果から消えて先頭復帰を確認する。直接URL/再読込/戻る進む/編集から条件復帰、ページ変更で選択解除、通信断/401時の保護情報消去を確認。小画面・200%・キーボードで主操作できること、外部通信0と秘密非保存も確認する。実引換・視聴権の試験は未実装と明記。
-- [ ] **Step 7: 文書・検証・独立レビュー。** 操作ガイドに実装済み/後続ゲート、適用前バックアップと復元の注意、合成DBでの結果を保存しREADMEへ接続。`pnpm verify`と`git diff --check`を完走し、Issue/PRに正確な件数・未確認事項・SHAを記録する。変更をfreezeし別5.6系でレビュー、重要指摘は同じ実装担当へ戻す。条件がそろうまで#29はDraftを維持。Ready化後はknrytへexact-head再レビューを依頼し、自分でApprove/Mergeしない。
+- [x] **Step 5: 最小UIを接続。** 検索フォーム、リセット、100行、各行と現ページの選択、件数、二つの明示目標ボタン、確認、結果を既存URL別画面へ組み込む。設定と利用状態を別表示し、公開設定済みでも実配信停止と表示。対象IDが選択されたと分かるラベル、indeterminate、キーボード/フォーカス/通知を付ける。結果不明は再取得のみを案内し、自動再送しない。
+- [x] **Step 6: 隔離ブラウザで受入。** 動画1001件・一動画キー1001件を別ポートに用意する。検索→複数選択→確認中止/実行→一覧更新、100件一括、動画公開/非公開、キー無効/有効、取消済み選択不可、終了時刻拒否、検索結果から消えて先頭復帰を確認する。直接URL/再読込/戻る進む/編集から条件復帰、ページ変更で選択解除、通信断/401時の保護情報消去を確認。小画面・キーボードで主操作できること、外部通信0と秘密非保存も確認する。実200%・BFCache復帰はIssue #30の公開前確認へ集約し、本Taskの新画面もその対象とする。実引換・視聴権の試験は未実装と明記。
+- [ ] **Step 7: 文書・検証・独立レビュー。** 実装担当の文書化と検証まで完了。変更freeze後の独立レビュー、PR記録、knrytのexact-head再レビューと統合は未完了。操作ガイドに実装済み/後続ゲート、適用前バックアップと復元の注意、合成DBでの結果を保存しREADMEへ接続。`pnpm verify`と`git diff --check`を完走し、Issue/PRに正確な件数・未確認事項・SHAを記録する。変更をfreezeし別5.6系でレビュー、重要指摘は同じ実装担当へ戻す。条件がそろうまで#29はDraftを維持。Ready化後はknrytへexact-head再レビューを依頼し、自分でApprove/Mergeしない。
 
 ## 受入と終了の区別
 

@@ -1,11 +1,11 @@
 # 一覧絞り込みと一括状態変更
 
-- 状態: 仕様承認済み（2026-09-09「進めてください」）。実装計画を保存、製品実装は先行PR統合待ち。
+- 状態: 仕様承認済み。実装・合成検証完了、独立レビューと統合待ち（2026-09-09）。
 - 作成日: 2026-09-09
-- Tracking: [Issue #28](https://github.com/rytich/play-cms/issues/28) / [Draft PR #29](https://github.com/rytich/play-cms/pull/29)
+- Tracking: [Issue #28](https://github.com/rytich/play-cms/issues/28) / [PR #29](https://github.com/rytich/play-cms/pull/29)
 - 実装計画: [一覧絞り込みと一括状態変更](../plans/2026-09-09-bulk-management-implementation.md)
 - 前提: [基本UI仕様](2026-09-08-ui-theme-navigation-design.md)、[P0設計](2026-09-07-p0-prototype-design.md)、[SECURITY.md](../../../SECURITY.md)
-- 先行実装: [Issue #24](https://github.com/rytich/play-cms/issues/24) / [PR #27](https://github.com/rytich/play-cms/pull/27)。確認時点でDraft/Open。製品実装は統合後に開始する。
+- 先行実装: [Issue #24](https://github.com/rytich/play-cms/issues/24) / [PR #27](https://github.com/rytich/play-cms/pull/27)。knrytの承認・develop統合、Issue終了を確認済み。公開前の未確認は[Issue #30](https://github.com/rytich/play-cms/issues/30)に保持する。
 
 ## 確定した目的と範囲
 

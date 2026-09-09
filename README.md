@@ -22,6 +22,8 @@ pnpm verify
 
 ## 文書
 
+- [一覧絞り込み・一括状態変更の操作とmigration](docs/development/bulk-management.md)
+- [Issueの現在状態](docs/development/issue-status.md)
 - [テーマ差し替え・管理者／視聴者UI仕様（管理UI実装済み・ブラウザ受入一部未完了）](docs/superpowers/specs/2026-09-08-ui-theme-navigation-design.md)
 - [最小テーマと管理UIの実装計画](docs/superpowers/plans/2026-09-08-admin-ui-theme-implementation.md)
 - [管理画面のテーマ差し替え手順](docs/development/ui-theming.md)
