@@ -17,5 +17,17 @@
       "database_id": "00000000-0000-0000-0000-000000000000",
       "migrations_dir": "../../../migrations",
     },
+    {
+      "binding": "OLD_DATABASE",
+      "database_name": "play-cms-worker-test-old",
+      "database_id": "00000000-0000-0000-0000-000000000001",
+      "migrations_dir": "../../../migrations",
+    },
+    {
+      "binding": "ROLLBACK_DATABASE",
+      "database_name": "play-cms-worker-test-rollback",
+      "database_id": "00000000-0000-0000-0000-000000000002",
+      "migrations_dir": "../../../migrations",
+    },
   ],
 }

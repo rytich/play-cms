@@ -24,15 +24,7 @@ export function acceptIssuedCodeForSelection(
   issued: IssuedCode,
 ) {
   if (selectedVideoId !== requestedVideoId) return null
-  return {
-    issuedCode: issued.code,
-    metadata: {
-      id: issued.id,
-      createdAt: issued.createdAt,
-      revokedAt: null,
-      status: 'unused' as const,
-    },
-  }
+  return { issuedCode: issued.code }
 }
 
 export class AdminRequestError extends Error {
@@ -85,6 +77,8 @@ function messageForStatus(status: number) {
   if (status === 401) return 'ログインが必要です。'
   if (status === 403) return 'この操作は許可されていません。'
   if (status === 404) return '対象が見つかりません。'
+  if (status === 409)
+    return '状態が変更されています。再取得して確認してください。'
   if (status === 429) return '時間をおいてからもう一度お試しください。'
   return '現在処理できません。'
 }

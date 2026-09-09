@@ -3,6 +3,8 @@ import type { Context } from 'hono'
 
 import {
   bootstrapConsumed,
+  bulkUpdateAccessCodes,
+  bulkUpdateVideos,
   createOnlyAdmin,
   createSession,
   deleteSession,
@@ -29,11 +31,16 @@ import {
   hasOnlyFields,
   isPlainRecord,
   normalizeEmail,
-  parseOffset,
   parseVideoInput,
   validLoginPassword,
   validNewPassword,
 } from '../core/admin'
+import {
+  parseBulkCodeInput,
+  parseBulkVideoInput,
+  parseCodeFilters,
+  parseVideoFilters,
+} from '../core/admin-management'
 import {
   applyRateLimit,
   applySecurityHeaders,
@@ -121,6 +128,23 @@ async function requireAdmin(c: AppContext) {
 
 async function limitAdminWrite(c: AppContext, accountId: string) {
   return rateLimited(c, [
+    {
+      endpoint: 'admin-write',
+      rawBucket: `admin:${accountId}`,
+      windowSeconds: 60,
+      maximum: 60,
+    },
+  ])
+}
+
+async function limitAdminBulk(c: AppContext, accountId: string) {
+  return rateLimited(c, [
+    {
+      endpoint: 'admin-bulk',
+      rawBucket: `admin:${accountId}`,
+      windowSeconds: 60,
+      maximum: 6,
+    },
     {
       endpoint: 'admin-write',
       rawBucket: `admin:${accountId}`,
@@ -270,9 +294,27 @@ app.post('/api/auth/logout', async (c) => {
 app.get('/api/admin/videos', async (c) => {
   const auth = await requireAdmin(c)
   if ('response' in auth) return auth.response
-  const offset = parseOffset(c.req.query('offset'))
-  if (offset === null) return c.json(errorBody.invalid, 400)
-  return c.json({ videos: await listVideos(c.env.DATABASE, offset) })
+  const filters = parseVideoFilters(new URL(c.req.url).searchParams)
+  if (!filters) return c.json(errorBody.invalid, 400)
+  return c.json(await listVideos(c.env.DATABASE, filters))
+})
+
+app.post('/api/admin/videos/bulk-status', async (c) => {
+  const auth = await requireAdmin(c)
+  if ('response' in auth) return auth.response
+  const limited = await limitAdminBulk(c, auth.accountId)
+  if (limited) return limited
+  const body = await writeBody(c)
+  if ('response' in body) return body.response
+  const input = parseBulkVideoInput(body.value)
+  if (!input) return c.json(errorBody.invalid, 400)
+  const result = await bulkUpdateVideos(c.env.DATABASE, input.ids, input.status)
+  return result.kind === 'not-found'
+    ? c.json(errorBody.notFound, 404)
+    : c.json({
+        changedCount: result.changedCount,
+        unchangedCount: result.unchangedCount,
+      })
 })
 
 app.post('/api/admin/videos', async (c) => {
@@ -362,12 +404,16 @@ app.post('/api/admin/videos/:id/codes', async (c) => {
 app.get('/api/admin/videos/:id/codes', async (c) => {
   const auth = await requireAdmin(c)
   if ('response' in auth) return auth.response
-  const offset = parseOffset(c.req.query('offset'))
-  if (offset === null) return c.json(errorBody.invalid, 400)
-  const rows = await listAccessCodes(c.env.DATABASE, c.req.param('id'), offset)
-  if (!rows) return c.json(errorBody.notFound, 404)
+  const filters = parseCodeFilters(new URL(c.req.url).searchParams)
+  if (!filters) return c.json(errorBody.invalid, 400)
+  const result = await listAccessCodes(
+    c.env.DATABASE,
+    c.req.param('id'),
+    filters,
+  )
+  if (!result) return c.json(errorBody.notFound, 404)
   return c.json({
-    codes: rows.map((row) => ({
+    codes: result.codes.map((row) => ({
       id: row.id,
       createdAt: new Date(row.created_at * 1_000).toISOString(),
       revokedAt:
@@ -376,7 +422,33 @@ app.get('/api/admin/videos/:id/codes', async (c) => {
           : new Date(row.revoked_at * 1_000).toISOString(),
       status:
         row.revoked_at === null ? ('unused' as const) : ('revoked' as const),
+      enabled: row.is_enabled === 1,
     })),
+    hasMore: result.hasMore,
+  })
+})
+
+app.post('/api/admin/videos/:id/codes/bulk-status', async (c) => {
+  const auth = await requireAdmin(c)
+  if ('response' in auth) return auth.response
+  const limited = await limitAdminBulk(c, auth.accountId)
+  if (limited) return limited
+  const body = await writeBody(c)
+  if ('response' in body) return body.response
+  const input = parseBulkCodeInput(body.value)
+  if (!input) return c.json(errorBody.invalid, 400)
+  const result = await bulkUpdateAccessCodes(
+    c.env.DATABASE,
+    c.req.param('id'),
+    input.ids,
+    input.enabled,
+    Math.floor(Date.now() / 1_000),
+  )
+  if (result.kind === 'not-found') return c.json(errorBody.notFound, 404)
+  if (result.kind === 'conflict') return c.json(errorBody.conflict, 409)
+  return c.json({
+    changedCount: result.changedCount,
+    unchangedCount: result.unchangedCount,
   })
 })
 

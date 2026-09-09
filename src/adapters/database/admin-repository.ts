@@ -1,4 +1,9 @@
 import type { Video, VideoInput } from '../../core/admin'
+import type {
+  CodeFilters,
+  VideoFilters,
+  VideoStatus,
+} from '../../core/admin-management'
 
 type AccountRow = { id: string; email: string; password_hash: string }
 type SessionAdmin = { account_id: string }
@@ -9,7 +14,7 @@ type VideoRow = {
   filma_file_id: string
   title: string
   description: string
-  status: 'draft'
+  status: VideoStatus
   starts_at: string
   ends_at: string
 }
@@ -132,18 +137,40 @@ export function deleteSession(db: D1Database, tokenHash: string) {
     .run()
 }
 
-export async function listVideos(db: D1Database, offset: number) {
+export async function listVideos(db: D1Database, filters: VideoFilters) {
+  const where: string[] = []
+  const bindings: (string | number)[] = []
+  if (filters.q) {
+    where.push('(instr(title, ?) > 0 OR filma_file_id = ?)')
+    bindings.push(filters.q, filters.q)
+  }
+  if (filters.status) {
+    where.push('status = ?')
+    bindings.push(filters.status)
+  }
+  if (filters.from) {
+    where.push('ends_at > ?')
+    bindings.push(filters.from)
+  }
+  if (filters.to) {
+    where.push('starts_at < ?')
+    bindings.push(filters.to)
+  }
   const rows = await db
     .prepare(
       `SELECT id, public_id, filma_file_id, title, description, status,
               starts_at, ends_at
        FROM videos
+       ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
        ORDER BY created_at DESC, id DESC
-       LIMIT 100 OFFSET ?`,
+       LIMIT 101 OFFSET ?`,
     )
-    .bind(offset)
+    .bind(...bindings, filters.offset)
     .all<VideoRow>()
-  return rows.results.map(mapVideo)
+  return {
+    videos: rows.results.slice(0, 100).map(mapVideo),
+    hasMore: rows.results.length > 100,
+  }
 }
 
 export async function insertVideo(
@@ -230,20 +257,173 @@ export async function insertAccessCode(
 export async function listAccessCodes(
   db: D1Database,
   videoId: string,
-  offset: number,
+  filters: CodeFilters,
 ) {
   const video = await findVideo(db, videoId)
   if (!video) return null
+  const where = ['video_id = ?']
+  const bindings: (string | number)[] = [videoId]
+  if (filters.codeId) {
+    where.push('id = ?')
+    bindings.push(filters.codeId)
+  }
+  if (filters.setting) {
+    where.push('is_enabled = ?')
+    bindings.push(filters.setting === 'enabled' ? 1 : 0)
+  }
+  if (filters.lifecycle === 'unused') where.push('revoked_at IS NULL')
+  if (filters.lifecycle === 'revoked') where.push('revoked_at IS NOT NULL')
+  if (filters.lifecycle === 'used') where.push('0 = 1')
+  if (filters.issuedFrom) {
+    where.push('created_at >= ?')
+    bindings.push(Math.ceil(Date.parse(filters.issuedFrom) / 1_000))
+  }
+  if (filters.issuedTo) {
+    where.push('created_at < ?')
+    bindings.push(Math.ceil(Date.parse(filters.issuedTo) / 1_000))
+  }
   const rows = await db
     .prepare(
-      `SELECT id, created_at, revoked_at FROM access_codes
-       WHERE video_id = ?
+      `SELECT id, created_at, revoked_at, is_enabled FROM access_codes
+       WHERE ${where.join(' AND ')}
        ORDER BY created_at DESC, id DESC
-       LIMIT 100 OFFSET ?`,
+       LIMIT 101 OFFSET ?`,
     )
-    .bind(videoId, offset)
-    .all<{ id: string; created_at: number; revoked_at: number | null }>()
-  return rows.results
+    .bind(...bindings, filters.offset)
+    .all<{
+      id: string
+      created_at: number
+      revoked_at: number | null
+      is_enabled: number
+    }>()
+  return {
+    codes: rows.results.slice(0, 100),
+    hasMore: rows.results.length > 100,
+  }
+}
+
+export async function bulkUpdateVideos(
+  db: D1Database,
+  ids: readonly string[],
+  status: VideoStatus,
+) {
+  const json = JSON.stringify(ids)
+  const results = await db.batch([
+    db
+      .prepare(
+        `SELECT COUNT(*) AS found_count,
+                COALESCE(SUM(status = ?), 0) AS unchanged_count
+         FROM videos WHERE id IN (SELECT value FROM json_each(?))`,
+      )
+      .bind(status, json),
+    db
+      .prepare(
+        `UPDATE videos SET status = ?, updated_at = ?
+         WHERE id IN (SELECT value FROM json_each(?)) AND status <> ?
+           AND (SELECT COUNT(*) FROM videos
+                WHERE id IN (SELECT value FROM json_each(?))) = ?`,
+      )
+      .bind(
+        status,
+        Math.floor(Date.now() / 1_000),
+        json,
+        status,
+        json,
+        ids.length,
+      ),
+  ])
+  const row = results[0]!.results[0] as {
+    found_count: number
+    unchanged_count: number
+  }
+  if (row.found_count !== ids.length) return { kind: 'not-found' as const }
+  const changedCount = results[1]!.meta.changes
+  if (changedCount + row.unchanged_count !== ids.length) {
+    throw new Error('bulk video outcome unavailable')
+  }
+  return {
+    kind: 'ok' as const,
+    changedCount,
+    unchangedCount: row.unchanged_count,
+  }
+}
+
+export async function bulkUpdateAccessCodes(
+  db: D1Database,
+  videoId: string,
+  ids: readonly string[],
+  enabled: boolean,
+  now: number,
+) {
+  const json = JSON.stringify(ids)
+  const target = enabled ? 1 : 0
+  const nowIso = new Date(now * 1_000).toISOString()
+  const results = await db.batch([
+    db
+      .prepare(
+        `SELECT
+           (SELECT COUNT(*) FROM videos WHERE id = ?) AS video_count,
+           COUNT(*) AS found_count,
+           COALESCE(SUM(revoked_at IS NOT NULL), 0) AS conflict_count,
+           COALESCE(SUM(is_enabled = ?), 0) AS unchanged_count,
+           (SELECT COUNT(*) FROM videos WHERE id = ? AND ends_at > ?) AS active_count
+         FROM access_codes
+         WHERE video_id = ? AND id IN (SELECT value FROM json_each(?))`,
+      )
+      .bind(videoId, target, videoId, nowIso, videoId, json),
+    db
+      .prepare(
+        `UPDATE access_codes SET is_enabled = ?
+         WHERE video_id = ?
+           AND id IN (SELECT value FROM json_each(?))
+           AND revoked_at IS NULL AND is_enabled <> ?
+           AND (? = 0 OR EXISTS (
+             SELECT 1 FROM videos WHERE id = ? AND ends_at > ?
+           ))
+           AND (SELECT COUNT(*) FROM access_codes
+                WHERE video_id = ? AND id IN (SELECT value FROM json_each(?))) = ?
+           AND (SELECT COUNT(*) FROM access_codes
+                WHERE video_id = ? AND id IN (SELECT value FROM json_each(?))
+                  AND revoked_at IS NULL) = ?`,
+      )
+      .bind(
+        target,
+        videoId,
+        json,
+        target,
+        target,
+        videoId,
+        nowIso,
+        videoId,
+        json,
+        ids.length,
+        videoId,
+        json,
+        ids.length,
+      ),
+  ])
+  const row = results[0]!.results[0] as {
+    video_count: number
+    found_count: number
+    conflict_count: number
+    unchanged_count: number
+    active_count: number
+  }
+  if (row.video_count !== 1 || row.found_count !== ids.length) {
+    return { kind: 'not-found' as const }
+  }
+  if (row.conflict_count > 0 || (enabled && row.active_count !== 1)) {
+    return { kind: 'conflict' as const }
+  }
+  const changedCount = results[1]!.meta.changes
+  if (changedCount + row.unchanged_count !== ids.length) {
+    throw new Error('bulk code outcome unavailable')
+  }
+  return {
+    kind: 'ok' as const,
+    changedCount,
+    unchangedCount: row.unchanged_count,
+  }
 }
 
 export async function revokeAccessCode(

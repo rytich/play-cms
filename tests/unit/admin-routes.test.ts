@@ -13,10 +13,12 @@ describe('admin routes', () => {
     expect(parseAdminRoute('/admin/videos', '')).toEqual({
       kind: 'videos',
       offset: 0,
+      filters: { q: '', status: null, from: null, to: null, offset: 0 },
     })
     expect(parseAdminRoute('/admin/videos', '?offset=100')).toEqual({
       kind: 'videos',
       offset: 100,
+      filters: { q: '', status: null, from: null, to: null, offset: 100 },
     })
     expect(parseAdminRoute('/admin/videos/new', '?offset=100')).toEqual({
       kind: 'new-video',
@@ -33,6 +35,14 @@ describe('admin routes', () => {
       kind: 'video-codes',
       videoId: 'video-2',
       returnTo: '/admin/videos',
+      codeFilters: {
+        codeId: '',
+        setting: null,
+        lifecycle: null,
+        issuedFrom: null,
+        issuedTo: null,
+        offset: 0,
+      },
     })
   })
 
@@ -87,5 +97,40 @@ describe('admin routes', () => {
     expect(adminLoginUrl('https://example.invalid/admin/videos')).toBe(
       '/admin/login?returnTo=%2Fadmin%2Fvideos',
     )
+  })
+
+  it('round-trips independent video and code filters and resets only the submitted list', () => {
+    const search =
+      '?q=Title_%25&status=published&from=2026-09-09T00%3A00%3A00.000Z&offset=100' +
+      '&codeId=00000000-0000-4000-8000-000000000001&setting=disabled&lifecycle=unused' +
+      '&issuedFrom=2026-09-09T00%3A00%3A00.000Z&codesOffset=200'
+    const route = parseAdminRoute('/admin/videos/video-1/codes', search)
+    expect(route).toMatchObject({
+      kind: 'video-codes',
+      videoId: 'video-1',
+      returnTo:
+        '/admin/videos?q=Title_%25&status=published&from=2026-09-09T00%3A00%3A00.000Z&offset=100',
+      codeFilters: {
+        codeId: '00000000-0000-4000-8000-000000000001',
+        setting: 'disabled',
+        lifecycle: 'unused',
+        issuedFrom: '2026-09-09T00:00:00.000Z',
+        issuedTo: null,
+        offset: 200,
+      },
+    })
+  })
+
+  it('rejects duplicate, unknown, and invalid known filters', () => {
+    for (const search of [
+      '?q=a&q=b',
+      '?other=x',
+      '?status=public',
+      '?from=2026-09-10T00%3A00%3A00Z&to=2026-09-10T00%3A00%3A00Z',
+    ]) {
+      expect(parseAdminRoute('/admin/videos', search)).toEqual({
+        kind: 'not-found',
+      })
+    }
   })
 })

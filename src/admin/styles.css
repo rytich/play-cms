@@ -95,6 +95,71 @@ dt {
   border-top: 1px solid var(--play-color-border);
 }
 
+.filter-card {
+  margin-bottom: 16px;
+}
+
+[data-surface='admin'] .list-filters {
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  align-items: end;
+}
+
+.filter-actions,
+.row-actions,
+.bulk-actions > div {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.filter-actions {
+  min-height: 44px;
+}
+
+.select-page {
+  margin-bottom: 10px;
+  border-bottom: 1px solid var(--play-color-border);
+  padding-bottom: 10px;
+}
+
+[data-surface='admin'] .select-page label {
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  gap: 10px;
+}
+
+.bulk-actions {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 14px;
+  border-radius: var(--play-radius-control);
+  padding: 12px;
+  background: #f4f6fa;
+}
+
+.bulk-actions p,
+.bulk-actions small {
+  margin: 0;
+}
+
+.selectable-list > li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.selectable-list > li > input[type='checkbox'] {
+  width: 20px;
+  height: 20px;
+  flex: 0 0 auto;
+}
+
+.selectable-list .video-summary {
+  flex: 1;
+}
+
 .video-summary {
   display: grid;
   grid-template-columns: minmax(180px, 1fr) minmax(240px, 1fr) auto;
@@ -290,6 +355,16 @@ dt {
     display: inline-flex;
     min-height: 44px;
     align-items: center;
+  }
+
+  .row-actions a {
+    display: inline-flex;
+    min-height: 44px;
+    align-items: center;
+  }
+
+  .selectable-list > li {
+    align-items: flex-start;
   }
 
   .date-grid {
