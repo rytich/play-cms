@@ -187,6 +187,19 @@ describe('repository contract', () => {
     expect(workflow).toContain('https://github.com/rytich/play-cms/issues/1')
   })
 
+  it('requires exact-head browser evidence for navigation or authentication changes', async () => {
+    for (const path of ['CONTRIBUTING.md', 'docs/development/workflow.md']) {
+      const policy = await readFile(path, 'utf8')
+
+      expect(policy).toContain('viewer/admin')
+      expect(policy).toContain('navigation')
+      expect(policy).toContain('authentication')
+      expect(policy).toContain('exact-head')
+      expect(policy).toContain('pnpm test:browser:viewing')
+      expect(policy).toContain('merge')
+    }
+  })
+
   it('documents staged build and CI merge gates before Tasks 7 and 8', async () => {
     const specification = await readFile(
       'docs/superpowers/specs/2026-09-03-foundation-design.md',

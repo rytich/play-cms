@@ -607,9 +607,19 @@ app.post('/api/public/videos/:publicId/redeem', async (c) => {
       codeHash,
       accountId: session.account_id,
       now,
+      expectedFilmaFileId: video.filmaFileId,
     })
-    return redeemed
-      ? c.json({ ...viewingResponse(video, grant), anonymous: false })
+    if (redeemed) {
+      return c.json({ ...viewingResponse(video, grant), anonymous: false })
+    }
+    const current = await findRedeemCandidate(
+      c.env.DATABASE,
+      publicId,
+      codeHash,
+      new Date(now * 1_000).toISOString(),
+    )
+    return current && current.filmaFileId !== video.filmaFileId
+      ? c.json(errorBody.unavailable, 503)
       : c.json(errorBody.notFound, 404)
   }
 
@@ -621,8 +631,19 @@ app.post('/api/public/videos/:publicId/redeem', async (c) => {
     tokenHash: await sha256Hex(token),
     now,
     expiresAt: now + 1_800,
+    expectedFilmaFileId: video.filmaFileId,
   })
-  if (!redeemed) return c.json(errorBody.notFound, 404)
+  if (!redeemed) {
+    const current = await findRedeemCandidate(
+      c.env.DATABASE,
+      publicId,
+      codeHash,
+      new Date(now * 1_000).toISOString(),
+    )
+    return current && current.filmaFileId !== video.filmaFileId
+      ? c.json(errorBody.unavailable, 503)
+      : c.json(errorBody.notFound, 404)
+  }
   c.header(
     'Set-Cookie',
     `play_anonymous=${token}; Max-Age=1800; Path=/; HttpOnly; Secure; SameSite=Lax`,

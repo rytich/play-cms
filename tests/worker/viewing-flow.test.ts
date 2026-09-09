@@ -73,25 +73,25 @@ async function seedSession(role: 'admin' | 'viewer', id: string) {
   return `play_session=${token}`
 }
 
-function grantFetch() {
-  return vi.fn(() => {
-    const expiresAt = new Date(Date.now() + 60_000).toISOString()
-    const payload = btoa(
-      JSON.stringify({
-        exp: Math.floor(Date.parse(expiresAt) / 1_000),
-        mediafile_id: 42,
-      }),
-    )
-      .replaceAll('+', '-')
-      .replaceAll('/', '_')
-      .replace(/=+$/, '')
-    return Promise.resolve(
-      Response.json({
-        url: `https://filma.biz/player/synthetic?jwt=e30.${payload}.signature`,
-        mediafile_id: 42,
-      }),
-    )
+function grantResponse() {
+  const expiresAt = new Date(Date.now() + 60_000).toISOString()
+  const payload = btoa(
+    JSON.stringify({
+      exp: Math.floor(Date.parse(expiresAt) / 1_000),
+      mediafile_id: 42,
+    }),
+  )
+    .replaceAll('+', '-')
+    .replaceAll('/', '_')
+    .replace(/=+$/, '')
+  return Response.json({
+    url: `https://filma.biz/player/synthetic?jwt=e30.${payload}.signature`,
+    mediafile_id: 42,
   })
+}
+
+function grantFetch() {
+  return vi.fn(() => Promise.resolve(grantResponse()))
 }
 
 function request(
@@ -281,6 +281,52 @@ describe('one-time viewing flow', () => {
         .bind(codeId)
         .first(),
     ).toEqual({ revoked_at: null, is_enabled: 1, used: 0 })
+  })
+
+  it('does not consume when the Filma file binding changes during grant issuance', async () => {
+    for (const role of ['anonymous', 'viewer'] as const) {
+      await resetDatabase()
+      await seedAvailableVideo()
+      const viewerCookie =
+        role === 'viewer'
+          ? await seedSession('viewer', 'viewer-filma-race')
+          : undefined
+      const external = vi.fn(async () => {
+        await env.DATABASE.prepare(
+          `UPDATE videos SET filma_file_id = '999' WHERE id = 'video-a'`,
+        ).run()
+        return grantResponse()
+      })
+      vi.stubGlobal('fetch', external)
+
+      const response = await redeem(viewerCookie)
+      expect(response.status).toBe(503)
+      expect(external).toHaveBeenCalledTimes(1)
+      expect(
+        await env.DATABASE.prepare(
+          'SELECT COUNT(*) AS count FROM redemptions',
+        ).first(),
+      ).toEqual({ count: 0 })
+      expect(
+        await env.DATABASE.prepare(
+          'SELECT COUNT(*) AS count FROM entitlements',
+        ).first(),
+      ).toEqual({ count: 0 })
+      expect(
+        await env.DATABASE.prepare(
+          'SELECT COUNT(*) AS count FROM anonymous_play_sessions',
+        ).first(),
+      ).toEqual({ count: 0 })
+      expect(
+        await env.DATABASE.prepare(
+          `SELECT revoked_at, is_enabled,
+                  EXISTS(SELECT 1 FROM redemptions WHERE code_id = access_codes.id) AS used
+           FROM access_codes WHERE id = ?`,
+        )
+          .bind(codeId)
+          .first(),
+      ).toEqual({ revoked_at: null, is_enabled: 1, used: 0 })
+    }
   })
 
   it('transfers an anonymous redemption during registration and supports library playback', async () => {

@@ -68,6 +68,7 @@ export async function redeemForAnonymous(
     tokenHash: string
     now: number
     expiresAt: number
+    expectedFilmaFileId: string
   },
 ) {
   const nowIso = new Date(input.now * 1_000).toISOString()
@@ -111,6 +112,7 @@ export async function redeemForAnonymous(
            AND redemptions.code_id IS NULL
            AND videos.status = 'published'
            AND videos.starts_at <= ? AND videos.ends_at > ?
+           AND videos.filma_file_id = ?
            AND EXISTS (SELECT 1 FROM anonymous_play_sessions WHERE id = ?)`,
       )
       .bind(
@@ -120,6 +122,7 @@ export async function redeemForAnonymous(
         input.codeHash,
         nowIso,
         nowIso,
+        input.expectedFilmaFileId,
         input.sessionId,
       ),
     db
@@ -141,6 +144,7 @@ export async function redeemForViewer(
     codeHash: string
     accountId: string
     now: number
+    expectedFilmaFileId: string
   },
 ) {
   const nowIso = new Date(input.now * 1_000).toISOString()
@@ -157,7 +161,8 @@ export async function redeemForViewer(
            AND access_codes.revoked_at IS NULL AND access_codes.is_enabled = 1
            AND redemptions.code_id IS NULL
            AND videos.status = 'published'
-           AND videos.starts_at <= ? AND videos.ends_at > ?`,
+           AND videos.starts_at <= ? AND videos.ends_at > ?
+           AND videos.filma_file_id = ?`,
       )
       .bind(
         input.accountId,
@@ -166,6 +171,7 @@ export async function redeemForViewer(
         input.codeHash,
         nowIso,
         nowIso,
+        input.expectedFilmaFileId,
       ),
     db
       .prepare(

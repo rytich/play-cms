@@ -139,6 +139,8 @@
 
   #35へGO/NO-GO、件数、command、head SHA、未確認事項を記録する。秘密値がdiffとログにないことを確認し、`feat: complete one-time viewing flow (#35)`でcommitする。PRは`develop`向けに`Refs #35`を記載し、別5.6系レビュー後、knrytのexact-head承認・CI成功を待つ。
 
+  viewer/adminのnavigationまたはauthentication flowを変更するheadでは、`pnpm test:browser:viewing`のexact-head成功記録も承認・mergeの前提とする。合成browser受入を実Worker、D1、Filmaの証拠として扱わない。
+
 ---
 
 ### Task 2: D1 migrationとCloudflare招待環境を構築する

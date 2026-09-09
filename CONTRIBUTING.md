@@ -23,6 +23,8 @@ PR本文には`Refs #<番号>`、変更範囲、リスク、確認したシナ�
 
 Cloudflare用とNode.js用のビルドをTask 7で導入するまでは、Task固有テストとその時点の`pnpm verify`を実行し、結果をIssueとPRへ記録します。導入後は両環境のビルドも必須です。Task 8でCIを導入するまでは、記録済みのローカル検証、独立レビュー、文書更新をマージ条件とします。導入後はCI成功も確認します。
 
+viewer/adminのnavigationまたはauthentication flowを変更するPRは、承認・merge対象のexact-head SHAで`pnpm test:browser:viewing`を成功させ、そのSHAと結果をPRへ記録することを追加のマージ前提とします。ソース変更後は新しいheadで再実行します。この合成browser証拠は実Worker、D1、Filmaの確認を代替しません。
+
 ## コミット
 
 コミットメッセージは`feat:`、`fix:`、`docs:`、`test:`、`refactor:`、`chore:`、`ci:`のいずれかで始め、1コミットの目的を明確にします。
