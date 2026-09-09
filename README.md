@@ -13,7 +13,7 @@ localhost限定で、管理者機能に加えて視聴者登録・ログイン�
 ## 開発環境
 
 - Node.js 22.13.0系または24以上
-- pnpm 11.19.0以上
+- pnpm 11.19.0（`packageManager`で固定）
 
 ```bash
 pnpm install
@@ -44,3 +44,6 @@ pnpm verify
 - [Issue #35: 使い切りキー・匿名視聴・視聴権引き継ぎ](https://github.com/rytich/play-cms/issues/35)
 - [Issue #36: D1 migrationとCloudflare招待環境](https://github.com/rytich/play-cms/issues/36)
 - [Issue #37: 3〜5名の招待操作確認](https://github.com/rytich/play-cms/issues/37)
+- [Issue #16: Filma再生契約のGO/NO-GO](https://github.com/rytich/play-cms/issues/16)
+- [Issue #30: 公開前ブラウザ受入](https://github.com/rytich/play-cms/issues/30)
+- [全Issueの現在地](docs/development/issue-status.md)
