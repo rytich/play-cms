@@ -9,8 +9,10 @@ const frameIsolationHeaders = {
 
 export default defineConfig(() => {
   const verifyBuild = process.env.PLAY_VERIFY_BUILD === 'true'
+  const browserStatePath = process.env.PLAY_BROWSER_STATE_PATH
   return {
     root: 'src/admin',
+    publicDir: '../../public',
     plugins: [
       react(),
       cloudflare({
@@ -19,7 +21,11 @@ export default defineConfig(() => {
           : '../../wrangler.jsonc',
         ...(verifyBuild
           ? {}
-          : { persistState: { path: '../../.wrangler/state' } }),
+          : {
+              persistState: {
+                path: browserStatePath ?? '../../.wrangler/state',
+              },
+            }),
       }),
     ],
     server: { host: '127.0.0.1', headers: frameIsolationHeaders },

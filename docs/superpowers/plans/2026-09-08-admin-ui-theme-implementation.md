@@ -16,7 +16,7 @@
 
 - 計画作成: 2026-09-08。計画提示済みになるまでコード実装は開始しない。
 - 設計の保存: [Issue #22](https://github.com/rytich/play-cms/issues/22) / [文書PR #23](https://github.com/rytich/play-cms/pull/23)。本計画はこの文書PRに含める。
-- 製品実装: [Issue #24](https://github.com/rytich/play-cms/issues/24)。一つの縦切りTask・一つの実装PRで扱い、文書PRへ製品コードを混ぜない。
+- 製品実装: [Issue #24](https://github.com/rytich/play-cms/issues/24) / [Draft PR #27](https://github.com/rytich/play-cms/pull/27)。一つの縦切りTask・一つの実装PRで扱い、文書PRへ製品コードを混ぜない。
 - URL要件の追加文書: [Issue #25](https://github.com/rytich/play-cms/issues/25)。#23マージ後の追加分は別の文書PRで追跡し、#24着手時にはこの追補の正式マージも確認する。
 - 調査した管理実装: [PR #20](https://github.com/rytich/play-cms/pull/20)、head `69408ac76bd5e0fff5a20005be6b2e36082a3397`。2026-09-08時点でDraft・未マージ。これは着手可能の証拠ではない。
 - 実装前にPR #20の重要指摘解消・新headの独立レビューと正式マージ、PR #23の正式マージを確認する。先行CI・rulesetの実状態も再確認し、チェック0件を成功扱いにしない。
@@ -96,11 +96,11 @@ type AdminLayoutProps = {
 // canLeaveEditor(dirty: boolean, confirmedDiscard: boolean): boolean
 ```
 
-- [ ] **Step 1: 前提と安全な検証環境を確認する。**
+- [x] **Step 1: 前提と安全な検証環境を確認する。**
 
 PR #20 / #23のマージと最新developの内容、独立レビューの解消状況を確認し、Issue #24へ開始SHA・ブランチ名を記録する。専用作業場所の合成データ・秘密を含まないテスト設定で既存`pnpm verify`を実行し、基準結果を保存する。既存の稼働サーバー、`.dev.vars`、ローカルD1をコピー・初期化・停止しない。実ブラウザ用の試験が必要なら別のloopbackポートを使う。
 
-- [ ] **Step 2: ブランド境界と未保存判断の失敗するテストを書く。**
+- [x] **Step 2: ブランド境界と未保存判断の失敗するテストを書く。**
 
 `tests/unit/ui-brand.test.ts`には以下を置く。まだbrand.tsがない段階の失敗を確認する。
 
@@ -147,7 +147,7 @@ it('keeps unsaved input unless discard is confirmed', () => {
 
 実行: `pnpm vitest run tests/unit/ui-brand.test.ts tests/unit/admin-ui-state.test.ts`。Expected: 未作成moduleによるFAIL。既存APIや暗号の失敗をこのREDとして数えない。
 
-- [ ] **Step 3: 設定・最小判断関数・CSSを実装する。**
+- [x] **Step 3: 設定・最小判断関数・CSSを実装する。**
 
 brand.tsは上記型と定数をexportし、パス判定はkindごとの正規表現で完全一致にする。判定NGは画像を描画せずテキストへ戻す。未保存判定の実装は次に限定し、ナビ側で確認結果を渡す。
 
@@ -175,7 +175,7 @@ export function canLeaveEditor(
 
 実行: Step 2の同一コマンド。Expected: PASS。CSS値を変えても判断関数・APIが変わらない構成にする。
 
-- [ ] **Step 4: 共通枠の失敗するテストを書く。**
+- [x] **Step 4: 共通枠の失敗するテストを書く。**
 
 `tests/unit/ui-layout.test.tsx`で、既存React DOM Serverによる静的HTMLを検査する。状態遷移やCSSの見え方はこのテストだけで検証済みと扱わない。
 
@@ -214,7 +214,7 @@ it('renders only available admin navigation and the prototype boundary', () => {
 
 実行: `pnpm vitest run tests/unit/ui-layout.test.tsx`。Expected: 未作成layoutによるFAIL。同じファイルにAuthLayoutの一列フォーム枠とBrandのnull/不正パス時にimgがないケースを追加する。
 
-- [ ] **Step 5: 枠を実装し、管理画面に組み込む。**
+- [x] **Step 5: 枠を実装し、管理画面に組み込む。**
 
 Brandは有効画像だけを`img`で描画し、onErrorでテキストへ戻す。siteNameはReact文字列として出力する。設定したfaviconが有効なときだけ同一サイト内のlink要素へ適用し、未設定なら追加しない。
 
@@ -237,7 +237,7 @@ Appの既存ログイン判定を維持し、ログイン・初期設定だけAu
 
 実行: `pnpm vitest run tests/unit/ui-brand.test.ts tests/unit/admin-ui-state.test.ts tests/unit/ui-layout.test.tsx`、`pnpm typecheck`。Expected: PASS。APIキー設定・公開・再生のUIは出さない。
 
-- [ ] **Step 6: 一覧→編集→キーの操作を整える。**
+- [x] **Step 6: 一覧→編集→キーの操作を整える。**
 
 AdminVideosの表示状態はURLから一覧／新規／編集／キー管理へ解決し、メモリ内の`list`/`editor`だけで画面を切り替えない。一覧の「動画を登録」、行の「編集」、動画内の「基本情報」「閲覧用キー」、「一覧へ戻る」は実際のhrefを持つリンクとする。既存ページ送りはURLのoffsetと一致させ、画面変更後に対応見出しへフォーカスする。`returnToList`とAdminLayoutの`onVideos`を使う場合も同じ検証済み一覧URLへ移動し、別タブ操作を妨げない。DOM検索で隠れたボタンを押すような間接接続はしない。
 
@@ -249,7 +249,17 @@ AdminVideosの表示状態はURLから一覧／新規／編集／キー管理へ
 
 ここではPR #20で解消した非同期応答・秘密表示の防御を維持する。新たに不具合が見つかった場合は既存の実装担当へ戻し、範囲と防御テストをIssueで明確にしてから対処する。
 
-- [ ] **Step 7: 実ブラウザで受入条件を検証する。**
+- [x] **Step 7: 実ブラウザでローカル管理UIの受入条件を検証する（承認済み分離後の範囲）。**
+
+2026-09-09、ユーザーの「OKです」により、実BFCache復帰・実200%拡大の2項目を[公開前必須 Issue #30](https://github.com/rytich/play-cms/issues/30)へ正式分離した。以下の過去記録と未確認の結果はそのまま残す。本Stepの完了は残るローカル管理UI範囲の受入のみを意味し、2項目の成功や公開許可を意味しない。Issue #30完了まで外部公開・実配信は停止する。
+
+2026-09-08時点で、隔離した合成D1・別loopbackポート・専用Chrome profileにより、初回設定、ログイン、100件／101件目のページ送り、320／375／768／960／1280px表示、編集直URL、実際の戻る／進むを確認した。
+
+2026-09-09、同じ隔離条件を作り直し、標準Playwrightの新しいbrowser contextで主要フローを追加確認した。新規保存後の再読込と重複なし、未保存リンク／実際のブラウザ戻るの取消・破棄、キー発行・コピー成功／拒否・閉じる・再読込・取消、logout後の401と実際のブラウザ戻る／保護URL直アクセスでの生キー・保護データ非表示が通過した。明示破棄後にブラウザ標準警告が重なる不具合は、明示破棄の移動中だけ`beforeunload`を抑止する回帰テスト付き最小修正を行い、取消時と通常離脱時の保護を維持した。試験環境の履歴復帰は`pageshow.persisted === false`であり、この時点ではBFCacheからの復帰、200%拡大、全操作のキーボード確認、テーマ差し替え例が未確認だったため、本Stepを未完了としていた。その後の追加確認と承認済み分離後の現状は、本Step冒頭と以下の受入状況表を参照する。
+
+同日の独立レビュー後、修飾／非primary／処理済みクリックを未保存確認の対象外にし、日時関係エラーを開始・終了入力へARIAで関連付け、取消確認へ生キーではなく表示済みmetadata IDを含めた。局所Playwrightで修飾クリック時の確認0回と元画面保持、日時エラー時の入力保持と一般503時のinvalid非設定、取消対象IDの表示を確認した。
+
+変更要求後の追加受入では、新しい合成D1・別ポート・browser contextを使い、キーボードだけでログイン、モバイルメニュー、編集保存、キー発行・コピー・閉じる・取消を完了した。一時コピーでは合成サイト名・PNGロゴ・CSS変数の反映後、既定名・テキストfallback・既定CSSへ復元し、外部origin要求0と元ファイルとのbyte一致を確認した。Playwright既定の`--disable-back-forward-cache`だけを専用Chromeで除外しても、保護HTMLの`Cache-Control: no-store`、no-store下のJS通信、Vite WebSocketにより`pageshow.persisted`はfalseだった。200%のブラウザ拡大もPlaywrightのキー入力ではChrome UIの倍率が変わらず実測1倍だった。保護応答を弱めず、BFCache実復帰と実200%拡大は未確認のままとする。
 
 合成データ専用のlocalhost環境を使用する。以下は手動/利用可能なブラウザ操作で検証し、結果を表でIssue #24へ記録する。未検証セルを成功にしない。
 
@@ -269,17 +279,35 @@ AdminVideosの表示状態はURLから一覧／新規／編集／キー管理へ
 | 合成ロゴPNG、ロゴ不存在、CSS変数とsiteName変更、元へ戻す       | 共通反映、テキストfallback、復元可能、DB変更不要                                |
 | ネットワークとDOM確認                                          | 外部CSS/フォントなし、公開・再生・Filmaリクエストなし、キーがURL/永続領域にない |
 
+2026-09-09の受入状況:
+
+| 範囲                                   | 状況     | 根拠／残り                                                                    |
+| -------------------------------------- | -------- | ----------------------------------------------------------------------------- |
+| 新規保存・再読込                       | 確認済み | POSTは1回、編集URLへの置換後に再読込して同名1件                               |
+| 未保存のリンク・ブラウザ戻る           | 確認済み | 取消はURL・入力保持、破棄は移動、各操作の確認は1回                            |
+| キー発行・コピー・閉じる・再読込・取消 | 確認済み | コピー成功／拒否、閉じる／履歴移動後の生キー非表示、取消の中止／実行          |
+| logout・401・履歴戻り・保護URL         | 確認済み | 再認証前に生キー・動画名を表示しない                                          |
+| 外部通信・ブラウザ永続領域             | 確認済み | 外部origin要求0、生キーをURL・履歴state・local/session storageへ保存しない    |
+| BFCache復帰                            | 未確認   | 無効化引数を除外してもno-store、JS通信、Vite WebSocketにより`persisted=false` |
+| 200%拡大                               | 未確認   | Playwrightのキー入力はChrome UIの倍率を変更せず、実測1倍                      |
+| 主要操作のキーボード確認               | 確認済み | ログイン、モバイルメニュー、編集保存、キー発行・コピー・閉じる・取消          |
+| テーマ差し替え例・復元                 | 確認済み | 合成名・PNG・CSS変数を反映後、既定設定へbyte一致で復元。外部origin要求0       |
+
 ページ送りの回帰検証では専用テストDBに合成動画101件を用意する。1ページ目（offset 0）で100件・「前へ」無効・「次へ」有効を確認し、「次へ」で2ページ目（offset 100）へ進み1件・「次へ」無効を確認する。2ページ目の動画を編集して「一覧へ戻る」でoffset 100と選択対象が保持され、再び同じ動画を開けることを確認する。「前へ」でoffset 0に戻り、先頭100件とページ送り状態が復元されることを記録する。表示範囲・件数が各offsetと一致することも確認し、101件のfixtureは稼働中DBへ作らない。
 
 既定と変更例の双方で通常文字4.5:1、大文字3:1、操作部品3:1、主操作44pxを確認する。変更例はテスト用素材・一時的な設定を使い、既定設定を戻してからcommitする。UI操作で作ったデータを消す必要がある場合も、専用テストDBであることを確認し、既存の稼働DBには触れない。
 
-- [ ] **Step 8: 運用文書と全検証を仕上げる。**
+- [x] **Step 8: 運用文書と全検証を仕上げる。**
+
+2026-09-08、運用文書、公開素材ディレクトリの注意書き、README導線を追加し、`pnpm verify`と`git diff --check`を完走した。ビルド成果物を別loopbackポートで配信し、`/`、`/admin/login`、`/index.html`、未知経路のframe拒否ヘッダーも確認した。Step 7の未検証項目はこの完了に含めない。
 
 ui-theming.mdへ実際に存在する変数一覧、編集箇所、ビルド、ロゴのサイズ比を維持する方法、キャッシュ更新、元設定への復元を記録する。public/brand/README.mdは公開素材だけを置く旨と未設定時fallbackを明記。READMEからリンクし、Issue #24・実装PR・本計画を相互リンクする。
 
 実行: `pnpm verify`、`git diff --check`。Expected: 全成功。ビルドのJS/CSSサイズを基準から比較してIssueへ記録するが、この試験だけでWorkers Free適合や視聴機能の完成を宣言しない。
 
 - [ ] **Step 9: 保存・PR・独立レビュー。**
+
+2026-09-09、PR #27の作成、検証、独立レビューと変更要求への修正は実施済み。bf39b36の局所再レビューでは新規指摘0、CI成功。実BFCache復帰・実200%拡大は同日のユーザー承認によりIssue #30へ正式分離した。本更新の最新headを再レビューし、Ready化してknrytへ正式再レビューを依頼する。最新の証拠はIssue #24・PR #27に記録する。本Stepのチェックは正式Approve/Mergeと記録の完了後に付けるため、チェック未了それ自体をマージ前レビューの不足とは扱わない。実際の未解決指摘・CI・exact base/head等の条件は省略しない。
 
 テーマ・レイアウトと導線で必要に応じて小さくcommitするが、Task #24の一つのfeatureブランチ・PRに集約する。例: `git commit -m "feat: add minimal admin branding and navigation (#24)"`。変更対象だけをstageし、テスト素材・秘密・DBを含めない。
 

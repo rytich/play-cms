@@ -464,6 +464,51 @@ describe('admin API', () => {
     })
   })
 
+  it('reads one draft only for an authenticated administrator', async () => {
+    const cookie = await authenticatedCookie()
+    const created = await createVideo(cookie)
+    const { video } = await created.json<{
+      video: typeof validVideo & { id: string }
+    }>()
+
+    const unauthorized = await api(`/api/admin/videos/${video.id}`)
+    expect(unauthorized.status).toBe(401)
+    expect(await unauthorized.json()).toEqual({ error: 'unauthorized' })
+
+    const response = await api(`/api/admin/videos/${video.id}`, {
+      headers: { Cookie: cookie },
+    })
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({ video })
+    expectSecurityHeaders(response)
+
+    const missing = await api('/api/admin/videos/does-not-exist', {
+      headers: { Cookie: cookie },
+    })
+    expect(missing.status).toBe(404)
+    expect(await missing.json()).toEqual({ error: 'not_found' })
+  })
+
+  it('fails a single-video read closed without exposing database errors', async () => {
+    const cookie = await authenticatedCookie()
+    const database = {
+      prepare(query: string) {
+        if (query.includes('FROM sessions')) return env.DATABASE.prepare(query)
+        throw new Error('sensitive single-video database detail')
+      },
+    } as unknown as D1Database
+
+    const response = await requestWithBindings(
+      '/api/admin/videos/video-1',
+      { headers: { Cookie: cookie } },
+      { DATABASE: database },
+    )
+
+    expect(response.status).toBe(503)
+    expect(await response.text()).toBe('{"error":"unavailable"}')
+    expectSecurityHeaders(response)
+  })
+
   it('rejects invalid video fields, offsets, and missing updates', async () => {
     const cookie = await authenticatedCookie()
     for (const override of [
