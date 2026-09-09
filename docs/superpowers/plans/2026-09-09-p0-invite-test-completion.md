@@ -25,7 +25,7 @@
 
 ### Task 1: 閲覧キー・匿名視聴・視聴権を縦につなぐ
 
-**Tracking:** [Issue #35](https://github.com/rytich/play-cms/issues/35)
+**Tracking:** [Issue #35](https://github.com/rytich/play-cms/issues/35) / [PR #42](https://github.com/rytich/play-cms/pull/42)
 
 **Files:**
 

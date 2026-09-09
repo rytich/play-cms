@@ -2,7 +2,7 @@
 
 - 状態: P0限定で採用
 - 決定日: 2026-09-09
-- Tracking: [Issue #16](https://github.com/rytich/play-cms/issues/16) / [Issue #35](https://github.com/rytich/play-cms/issues/35)
+- Tracking: [Issue #16](https://github.com/rytich/play-cms/issues/16) / [Issue #35](https://github.com/rytich/play-cms/issues/35) / [PR #42](https://github.com/rytich/play-cms/pull/42)
 
 ## 背景
 

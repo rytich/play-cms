@@ -1,6 +1,6 @@
 # 視聴者認証と視聴権ライブラリ
 
-[Issue #32](https://github.com/rytich/play-cms/issues/32)・[PR #33](https://github.com/rytich/play-cms/pull/33)では、動画再生より前の最小機能として視聴者登録、ログイン、現在有効な視聴権の一覧を追加する。
+[Issue #32](https://github.com/rytich/play-cms/issues/32)・[PR #33](https://github.com/rytich/play-cms/pull/33)では、動画再生より前の最小機能として視聴者登録、ログイン、現在有効な視聴権の一覧を追加する。[Issue #35](https://github.com/rytich/play-cms/issues/35)・[PR #42](https://github.com/rytich/play-cms/pull/42)で、使い切りコードからの視聴権移行と`/v/:publicId`への導線を接続した。
 
 ## 画面とAPI
 

@@ -61,7 +61,7 @@ Filma上の動画を、管理者が公開期間と使い切り閲覧キーで限
 
 ## P0招待テストの完了条件
 
-1. [Issue #35](https://github.com/rytich/play-cms/issues/35)で、キー消費、匿名視聴、登録／ログイン時の権利引き継ぎ、再視聴を一本につなぐ。
+1. [Issue #35](https://github.com/rytich/play-cms/issues/35)・[PR #42](https://github.com/rytich/play-cms/pull/42)で、キー消費、匿名視聴、登録／ログイン時の権利引き継ぎ、再視聴を一本につなぐ。
 2. [Issue #30](https://github.com/rytich/play-cms/issues/30)で、実BFCache復帰と200%拡大を確認する。
 3. [Issue #36](https://github.com/rytich/play-cms/issues/36)で、専用Cloudflare D1へmigrationを適用し、招待テスト用Workerへデプロイする。
 4. [Issue #37](https://github.com/rytich/play-cms/issues/37)で3〜5名が操作し、80%以上が補助なしで「キー入力から再生」まで完了する。

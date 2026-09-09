@@ -1,6 +1,6 @@
 # 使い切り視聴フロー
 
-[Issue #35](https://github.com/rytich/play-cms/issues/35)で、使い切りコードから匿名視聴、視聴者アカウントへの視聴権移行までを縦に接続した。一般公開と実Filma再生のGO判定はこの実装に含まない。
+[Issue #35](https://github.com/rytich/play-cms/issues/35)・[PR #42](https://github.com/rytich/play-cms/pull/42)で、使い切りコードから匿名視聴、視聴者アカウントへの視聴権移行までを縦に接続した。一般公開と実Filma再生のGO判定はこの実装に含まない。
 
 ## 画面とAPI
 

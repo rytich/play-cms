@@ -3,6 +3,7 @@
 - 確認日: 2026-09-07
 - Tracking: [GitHub Issue #16](https://github.com/rytich/play-cms/issues/16)
 - Review: [GitHub PR #17](https://github.com/rytich/play-cms/pull/17)
+- P0実装: [GitHub Issue #35](https://github.com/rytich/play-cms/issues/35) / [GitHub PR #42](https://github.com/rytich/play-cms/pull/42)
 - 設計: [P0プロトタイプ設計](../superpowers/specs/2026-09-07-p0-prototype-design.md)
 - 計画: [P0 Task 2](../superpowers/plans/2026-09-07-p0-prototype-implementation.md#task-2-filmaの既存動画再生契約を4時間で確定する)
 - 対象環境: 専用テスト組織用に設定済みのローカル認証情報。動画の作成・更新・削除なし。
