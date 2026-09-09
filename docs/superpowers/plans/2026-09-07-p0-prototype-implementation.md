@@ -650,6 +650,8 @@ PRには並行消費testと非開示testの結果を明記する。
 
 ### Task 5: 視聴者登録、権利引き継ぎ、ライブラリを縦につなぐ
 
+> 段階実装: [Issue #32](https://github.com/rytich/play-cms/issues/32)では、Filma再生契約がNO-GOの間にコードを消費しないよう、[視聴者認証・ライブラリ計画](2026-09-09-viewer-auth-library-implementation.md)に沿って登録・ログイン・合成権利データによる一覧までを先行する。匿名session、コード消費、権利引き継ぎ、再生は後続PRで本Taskの残りとして実装する。
+
 **Tracking:** 開始前に`P0: 視聴者登録と視聴権ライブラリを実装する` Issueを作成する。
 
 **Files:**
