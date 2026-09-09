@@ -243,7 +243,17 @@ try {
     throw new Error('Filma API key remained in the form')
   }
 
+  await page.reload()
+  await page.getByText('接続済み', { exact: true }).waitFor()
   await page.goto(`${base}/admin/videos/video-a/codes`)
+  await page.getByText('使用済み', { exact: true }).waitFor()
+  await page.goBack()
+  await page.waitForURL(`${base}/admin/filma`)
+  await page.getByText('接続済み', { exact: true }).waitFor()
+  await page.goForward()
+  await page.waitForURL(`${base}/admin/videos/video-a/codes`)
+  await page.getByText('使用済み', { exact: true }).waitFor()
+
   await page.getByText('使用済み', { exact: true }).waitFor()
   const usedCheckbox = page.getByLabel(
     '閲覧用キーID 00000000-0000-4000-8000-000000000009 を選択',

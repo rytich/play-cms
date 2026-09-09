@@ -74,15 +74,24 @@ async function seedSession(role: 'admin' | 'viewer', id: string) {
 }
 
 function grantFetch() {
-  return vi.fn(() =>
-    Promise.resolve(
-      Response.json({
-        url: 'https://filma.biz/player/synthetic',
+  return vi.fn(() => {
+    const expiresAt = new Date(Date.now() + 60_000).toISOString()
+    const payload = btoa(
+      JSON.stringify({
+        exp: Math.floor(Date.parse(expiresAt) / 1_000),
         mediafile_id: 42,
-        expires_at: new Date(Date.now() + 60_000).toISOString(),
       }),
-    ),
-  )
+    )
+      .replaceAll('+', '-')
+      .replaceAll('/', '_')
+      .replace(/=+$/, '')
+    return Promise.resolve(
+      Response.json({
+        url: `https://filma.biz/player/synthetic?jwt=e30.${payload}.signature`,
+        mediafile_id: 42,
+      }),
+    )
+  })
 }
 
 function request(
@@ -192,11 +201,18 @@ describe('one-time viewing flow', () => {
     vi.stubGlobal('fetch', grantFetch())
     const first = await redeem()
     expect(first.status).toBe(200)
-    expect(await first.json()).toMatchObject({
+    const firstBody = await first.json<{
+      anonymous: boolean
+      video: { publicId: string; title: string }
+      playback: { url: string }
+    }>()
+    expect(firstBody).toMatchObject({
       anonymous: true,
       video: { publicId: 'public-a', title: 'Visible title' },
-      playback: { url: 'https://filma.biz/player/synthetic' },
     })
+    expect(firstBody.playback.url).toMatch(
+      /^https:\/\/filma\.biz\/player\/synthetic\?jwt=/,
+    )
     expect(first.headers.get('Set-Cookie')).toMatch(
       /^play_anonymous=[0-9a-f]{64}; Max-Age=1800; Path=\/; HttpOnly; Secure; SameSite=Lax$/,
     )
@@ -251,6 +267,20 @@ describe('one-time viewing flow', () => {
         'SELECT COUNT(*) AS count FROM anonymous_play_sessions',
       ).first(),
     ).toEqual({ count: 0 })
+    expect(
+      await env.DATABASE.prepare(
+        'SELECT COUNT(*) AS count FROM entitlements',
+      ).first(),
+    ).toEqual({ count: 0 })
+    expect(
+      await env.DATABASE.prepare(
+        `SELECT revoked_at, is_enabled,
+                EXISTS(SELECT 1 FROM redemptions WHERE code_id = access_codes.id) AS used
+         FROM access_codes WHERE id = ?`,
+      )
+        .bind(codeId)
+        .first(),
+    ).toEqual({ revoked_at: null, is_enabled: 1, used: 0 })
   })
 
   it('transfers an anonymous redemption during registration and supports library playback', async () => {
@@ -305,6 +335,42 @@ describe('one-time viewing flow', () => {
         })
       ).status,
     ).toBe(401)
+  })
+
+  it('returns 409 and preserves an anonymous right when registration email already exists', async () => {
+    await seedAvailableVideo()
+    await env.DATABASE.prepare(
+      `INSERT INTO accounts (id, role, email, password_hash, created_at)
+       VALUES ('existing-viewer', 'viewer', 'existing@example.test', 'unused', 1)`,
+    ).run()
+    vi.stubGlobal('fetch', grantFetch())
+    const redeemed = await redeem()
+    const anonymousCookie = responseCookie(redeemed, 'play_anonymous')
+    const registered = await request('/api/viewer/register', {
+      method: 'POST',
+      headers: { ...jsonHeaders, Cookie: anonymousCookie },
+      body: JSON.stringify({
+        email: 'existing@example.test',
+        password: 'viewer password long enough',
+      }),
+    })
+
+    expect(registered.status).toBe(409)
+    expect(
+      await env.DATABASE.prepare(
+        `SELECT redemptions.account_id, anonymous_play_sessions.expires_at > ? AS active
+         FROM redemptions
+         JOIN anonymous_play_sessions
+           ON anonymous_play_sessions.id = redemptions.anonymous_session_id`,
+      )
+        .bind(Math.floor(Date.now() / 1_000))
+        .first(),
+    ).toEqual({ account_id: null, active: 1 })
+    expect(
+      await env.DATABASE.prepare(
+        'SELECT COUNT(*) AS count FROM entitlements',
+      ).first(),
+    ).toEqual({ count: 0 })
   })
 
   it('redeems directly into an authenticated viewer entitlement', async () => {
@@ -411,6 +477,16 @@ describe('one-time viewing flow', () => {
 
   it('returns 404 without metadata at every unavailable boundary', async () => {
     const viewerCookie = await seedSession('viewer', 'viewer-boundary')
+    const anonymousToken = 'e'.repeat(64)
+    const anonymousCookie = `play_anonymous=${anonymousToken}`
+    const now = Math.floor(Date.now() / 1_000)
+    await env.DATABASE.prepare(
+      `INSERT INTO anonymous_play_sessions
+         (id, token_hash, expires_at, created_at)
+       VALUES ('anonymous-boundary', ?, ?, ?)`,
+    )
+      .bind(await sha256Hex(anonymousToken), now + 3_600, now)
+      .run()
     for (const [suffix, status, startsAt, endsAt, codeValue] of [
       [
         'draft',
@@ -433,6 +509,13 @@ describe('one-time viewing flow', () => {
         '2021-01-01T00:00:00.000Z',
         '0000000000000003',
       ],
+      [
+        'exact-end',
+        'published',
+        '2020-01-01T00:00:00.000Z',
+        new Date(now * 1_000).toISOString(),
+        '0000000000000004',
+      ],
     ] as const) {
       await env.DATABASE.batch([
         env.DATABASE.prepare(
@@ -454,7 +537,29 @@ describe('one-time viewing flow', () => {
            (id, video_id, code_hash, created_at, revoked_at, is_enabled)
            VALUES (?, ?, ?, 1, NULL, 1)`,
         ).bind(`code-${suffix}`, `video-${suffix}`, await sha256Hex(codeValue)),
+        env.DATABASE.prepare(
+          `INSERT INTO redemptions
+             (code_id, video_id, anonymous_session_id, account_id, redeemed_at)
+           VALUES (?, ?, 'anonymous-boundary', NULL, ?)`,
+        ).bind(`code-${suffix}`, `video-${suffix}`, now),
+        env.DATABASE.prepare(
+          `INSERT INTO entitlements
+             (account_id, video_id, source_code_id, granted_at)
+           VALUES ('viewer-boundary', ?, ?, ?)`,
+        ).bind(`video-${suffix}`, `code-${suffix}`, now),
       ])
+      const publicPage = await request(`/v/public-${suffix}`, undefined, {
+        ASSETS: {
+          fetch: () =>
+            Promise.resolve(
+              new Response('<!doctype html><title>viewer</title>', {
+                headers: { 'Content-Type': 'text/html; charset=utf-8' },
+              }),
+            ),
+        },
+      })
+      expect(publicPage.status).toBe(200)
+      expect(await publicPage.text()).not.toContain(`secret-${suffix}`)
       const response = await request(
         `/api/public/videos/public-${suffix}/redeem`,
         {
@@ -465,6 +570,12 @@ describe('one-time viewing flow', () => {
       )
       expect(response.status).toBe(404)
       expect(await response.text()).toBe('{"error":"not_found"}')
+      const anonymousPlayback = await request(
+        `/api/public/videos/public-${suffix}/playback`,
+        { headers: { Cookie: anonymousCookie } },
+      )
+      expect(anonymousPlayback.status).toBe(404)
+      expect(await anonymousPlayback.text()).toBe('{"error":"not_found"}')
       const viewerPlayback = await request(
         `/api/viewer/videos/public-${suffix}/playback`,
         { headers: { Cookie: viewerCookie } },
@@ -479,6 +590,20 @@ describe('one-time viewing flow', () => {
     expect((await request('/api/public/videos/unknown/playback')).status).toBe(
       401,
     )
+    expect(
+      (
+        await request('/api/public/videos/unknown/playback', {
+          headers: { Cookie: anonymousCookie },
+        })
+      ).status,
+    ).toBe(404)
+    expect(
+      (
+        await request('/api/viewer/videos/unknown/playback', {
+          headers: { Cookie: viewerCookie },
+        })
+      ).status,
+    ).toBe(404)
   })
 
   it('allows only one winner when redemption races admin bulk and revoke', async () => {

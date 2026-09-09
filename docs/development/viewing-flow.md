@@ -28,11 +28,13 @@ pnpm vitest run --config vitest.worker.config.ts tests/worker/viewing-flow.test.
 PLAYWRIGHT_MODULE_PATH=/path/to/playwright PLAYWRIGHT_CHROME_PATH=/path/to/chrome pnpm test:browser:viewing
 ```
 
-`pnpm test:filma:playback:live`は通常の`pnpm verify`に含めない手動契約テストである。`FILMA_LIVE_API_KEY`、`FILMA_LIVE_FILE_ID`、`FILMA_LIVE_ALLOWED_ORIGIN`、`FILMA_LIVE_DENIED_ORIGIN`のどれかがない場合は、request前に`FILMA_LIVE_CONFIG_MISSING`で停止する。
+`pnpm test:filma:playback:live`は通常の`pnpm verify`に含めない手動契約テストである。専用テスト組織の`FILMA_LIVE_API_KEY`、`FILMA_LIVE_FILE_ID`、`FILMA_LIVE_NOT_FOUND_FILE_ID`、`FILMA_LIVE_INVALID_API_KEY`、`FILMA_LIVE_ALLOWED_ORIGIN`、`FILMA_LIVE_DENIED_ORIGIN`がすべて必要で、どれかがない場合はrequest前に`FILMA_LIVE_CONFIG_MISSING`で停止する。実行時はstorageの200/404/401/403と200 schema、返却URL内JWTの動画・期限、許可／拒否origin、期限後の同じgrantと`POST /filmaapi/token/refresh`を確認する。ログはstatus、真偽値、`all-conditions-passed`／`contract-denied`／`test-infrastructure-error`の分類だけとし、値、JWT、URL、response本文を出さない。
+
+合成Worker境界試験では、grant失敗時のredemption・entitlementが0件でコード状態が不変であること、既存メールへの登録失敗時に匿名権利が残ること、draft・公開前・終了時刻ちょうど・期限切れ・不明IDをpublic page、redeem、anonymous playback、library、viewer playbackで確認する。補助ブラウザ試験は`/admin/filma`のdirect openに加えてreloadとback/forward復元も確認する。
 
 ## 未確認と停止条件
 
-- 実Filma storage endpointの200/401/403/404 schemaとstatus、動画単位のgrant、5分以下の期限、拒否origin、期限後grant/refreshは未確認。
+- 実Filma storage endpointの200/401/403/404 schemaとstatus、動画単位のgrant、5分以下の期限、拒否origin、期限後grant/refreshは未確認。実値を持つ手動live testが三分類のいずれかを記録するまではGOにしない。
 - 実storage契約が確定するまで、動画保存前のlive確認を製品の作成・更新APIへ接続しない。
 - `PLAY_CMS_P0_INVITE_PLAYBACK` は既定無効。実契約を確認できない間は、招待試験でも有効化せずコードを消費しない。
 - remote D1、Cloudflare招待環境、実動画の保存・再生・deployは後続Taskの対象。

@@ -28,7 +28,9 @@ import {
   adminRequest,
   loginPasswordValidationError,
   localDateTime,
+  loadFilmaConnection,
   newPasswordValidationError,
+  saveFilmaConnection,
   toIsoDateTime,
 } from './client'
 import {
@@ -345,9 +347,7 @@ function FilmaSettingsPage({ onLogout, onUnauthorized }: ProtectedPageProps) {
   const load = useCallback(async () => {
     setState('確認中')
     try {
-      const result = await adminRequest<{ configured: boolean }>(
-        '/api/admin/filma',
-      )
+      const result = await loadFilmaConnection()
       setState(result.configured ? '接続済み' : '未設定')
     } catch (caught) {
       if (caught instanceof AdminRequestError && caught.status === 401) {
@@ -368,7 +368,7 @@ function FilmaSettingsPage({ onLogout, onUnauthorized }: ProtectedPageProps) {
     setBusy(true)
     setState('確認中')
     try {
-      await adminRequest('/api/admin/filma', 'PUT', { apiKey })
+      await saveFilmaConnection(apiKey)
       setState('接続済み')
     } catch (caught) {
       if (caught instanceof AdminRequestError && caught.status === 401) {

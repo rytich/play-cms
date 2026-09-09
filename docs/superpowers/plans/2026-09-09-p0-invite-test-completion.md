@@ -73,7 +73,7 @@
 
   既存の`pnpm test:filma:live`はtoken endpointの認証だけを確認するため、再生GOの証拠に使わない。`test:filma:playback:live`はこの文書PRのheadにはまだ存在せず、Task 1 Step 1で最初に作るdeliverableとする。`tests/live/filma-playback.live.test.ts`と`vitest.playback-live.config.ts`を作成し、通常CIの`verify`から除外した同名scriptを`package.json`へ追加する。`pnpm run`の一覧に同scriptが表示されることをcommand-discoveryの受入条件とする。
 
-  Git管理外の`FILMA_LIVE_API_KEY`、`FILMA_LIVE_FILE_ID`、`FILMA_LIVE_ALLOWED_ORIGIN`、`FILMA_LIVE_DENIED_ORIGIN`が全てある場合だけ手動実行する。4変数のいずれかがない状態ではFilmaへrequestを送らず、変数名だけを含む`FILMA_LIVE_CONFIG_MISSING`で明示的に失敗することをtestで固定する。値、APIキー、動画ID、URLは出力しない。
+  Git管理外の`FILMA_LIVE_API_KEY`、`FILMA_LIVE_FILE_ID`、`FILMA_LIVE_NOT_FOUND_FILE_ID`、`FILMA_LIVE_INVALID_API_KEY`、`FILMA_LIVE_ALLOWED_ORIGIN`、`FILMA_LIVE_DENIED_ORIGIN`が全てある場合だけ手動実行する。6変数のいずれかがない状態ではFilmaへrequestを送らず、変数名だけを含む`FILMA_LIVE_CONFIG_MISSING`で明示的に失敗することをtestで固定する。値、APIキー、動画ID、URLは出力しない。
 
   専用テストは、公開済みの専用動画一件に対して`jwt_expires_at = now + 10秒`を指定し、返却URL内tokenの非null期限が指定値以下であること、許可originで再生開始できること、拒否originで403になること、11秒後に同じgrantとrefreshの両方が拒否されることを確認する。status、期限比較、確認項目名だけを出力し、APIキー、動画ID、JWT、URL、応答本文を出力しない。
 
@@ -123,6 +123,8 @@
 - [x] **Step 8: 境界・ブラウザ・全検証を実行する**
 
   `draft`、公開前、終了時刻ちょうど、期限切れ、不明IDを、public page、redeem、anonymous playback、library、viewer playbackの表で検証する。ブラウザではdirect open、reload、back、forward、匿名から登録、再login後libraryを確認する。
+
+  レビュー追補では、grant失敗時の全DB不変条件、既存メール登録時の匿名権利保持、public/redeem/anonymous/library/viewerの終了時刻ちょうどを含む非公開行列、認証済み不明ID、`/admin/filma`のreload・back・forwardを追加確認した。
 
   ```bash
   pnpm vitest run tests/unit/viewing.test.ts tests/unit/filma-playback-client.test.ts

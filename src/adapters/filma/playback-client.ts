@@ -9,7 +9,11 @@ type PlaybackInput = {
 }
 
 export type FilmaPlaybackErrorCode =
-  'FILE_NOT_FOUND' | 'FILMA_UNAVAILABLE' | 'INVALID_RESPONSE_SCHEMA'
+  | 'FILE_NOT_FOUND'
+  | 'INVALID_API_KEY'
+  | 'DOMAIN_NOT_ALLOWED'
+  | 'FILMA_UNAVAILABLE'
+  | 'INVALID_RESPONSE_SCHEMA'
 
 export class FilmaPlaybackError extends Error {
   constructor(readonly code: FilmaPlaybackErrorCode) {
@@ -21,8 +25,74 @@ export class FilmaPlaybackError extends Error {
 export type FilmaPlaybackLiveConfig = {
   apiKey: string
   fileId: string
+  notFoundFileId: string
+  invalidApiKey: string
   allowedOrigin: string
   deniedOrigin: string
+}
+
+export type FilmaPlaybackLiveClassification =
+  'all-conditions-passed' | 'contract-denied' | 'test-infrastructure-error'
+
+export type FilmaPlaybackLiveEvidence = {
+  storageStatus: number | null
+  notFoundStatus: number | null
+  invalidCredentialStatus: number | null
+  deniedStorageOriginStatus: number | null
+  allowedPlaybackStatus: number | null
+  deniedPlaybackOriginStatus: number | null
+  expiredPlaybackStatus: number | null
+  expiredRefreshStatus: number | null
+  tokenExpiryWithinLimit: boolean | null
+  tokenMatchesMedia: boolean | null
+}
+
+export function classifyFilmaPlaybackLiveEvidence(
+  evidence: FilmaPlaybackLiveEvidence,
+): FilmaPlaybackLiveClassification {
+  if (
+    evidence.storageStatus !== 200 ||
+    evidence.notFoundStatus !== 404 ||
+    evidence.invalidCredentialStatus !== 401 ||
+    evidence.deniedStorageOriginStatus !== 403 ||
+    evidence.allowedPlaybackStatus === null ||
+    evidence.allowedPlaybackStatus < 200 ||
+    evidence.allowedPlaybackStatus >= 300 ||
+    evidence.deniedPlaybackOriginStatus === null ||
+    evidence.expiredPlaybackStatus === null ||
+    evidence.expiredRefreshStatus === null ||
+    evidence.tokenExpiryWithinLimit === null ||
+    evidence.tokenMatchesMedia === null
+  ) {
+    return 'test-infrastructure-error'
+  }
+  if (
+    evidence.deniedPlaybackOriginStatus >= 500 ||
+    evidence.expiredPlaybackStatus >= 500 ||
+    evidence.expiredRefreshStatus >= 500
+  ) {
+    return 'test-infrastructure-error'
+  }
+  if (
+    evidence.deniedPlaybackOriginStatus >= 200 &&
+    evidence.deniedPlaybackOriginStatus < 300
+  ) {
+    return 'contract-denied'
+  }
+  if (evidence.deniedPlaybackOriginStatus !== 403) {
+    return 'test-infrastructure-error'
+  }
+  if (
+    !evidence.tokenExpiryWithinLimit ||
+    !evidence.tokenMatchesMedia ||
+    (evidence.expiredPlaybackStatus >= 200 &&
+      evidence.expiredPlaybackStatus < 300) ||
+    (evidence.expiredRefreshStatus >= 200 &&
+      evidence.expiredRefreshStatus < 300)
+  ) {
+    return 'contract-denied'
+  }
+  return 'all-conditions-passed'
 }
 
 export function readFilmaPlaybackLiveConfig(
@@ -31,6 +101,8 @@ export function readFilmaPlaybackLiveConfig(
   const names = [
     'FILMA_LIVE_API_KEY',
     'FILMA_LIVE_FILE_ID',
+    'FILMA_LIVE_NOT_FOUND_FILE_ID',
+    'FILMA_LIVE_INVALID_API_KEY',
     'FILMA_LIVE_ALLOWED_ORIGIN',
     'FILMA_LIVE_DENIED_ORIGIN',
   ] as const
@@ -41,6 +113,8 @@ export function readFilmaPlaybackLiveConfig(
   return {
     apiKey: environment.FILMA_LIVE_API_KEY!,
     fileId: environment.FILMA_LIVE_FILE_ID!,
+    notFoundFileId: environment.FILMA_LIVE_NOT_FOUND_FILE_ID!,
+    invalidApiKey: environment.FILMA_LIVE_INVALID_API_KEY!,
     allowedOrigin: environment.FILMA_LIVE_ALLOWED_ORIGIN!,
     deniedOrigin: environment.FILMA_LIVE_DENIED_ORIGIN!,
   }
@@ -60,6 +134,55 @@ function safeFilmaUrl(value: unknown): value is string {
   }
 }
 
+function playbackJwtClaims(url: string) {
+  const token = new URL(url).searchParams.get('jwt')
+  const parts = token?.split('.')
+  if (!token || parts?.length !== 3 || !/^[A-Za-z0-9_-]+$/.test(parts[1]!)) {
+    throw new FilmaPlaybackError('INVALID_RESPONSE_SCHEMA')
+  }
+  const base64 = parts[1]!.replaceAll('-', '+').replaceAll('_', '/')
+  const padded = base64.padEnd(Math.ceil(base64.length / 4) * 4, '=')
+  let payload: unknown
+  try {
+    const binary = atob(padded)
+    const bytes = Uint8Array.from(binary, (character) =>
+      character.charCodeAt(0),
+    )
+    payload = JSON.parse(
+      new TextDecoder('utf-8', { fatal: true }).decode(bytes),
+    )
+  } catch {
+    throw new FilmaPlaybackError('INVALID_RESPONSE_SCHEMA')
+  }
+  if (typeof payload !== 'object' || payload === null) {
+    throw new FilmaPlaybackError('INVALID_RESPONSE_SCHEMA')
+  }
+  const { exp, mediafile_id: mediafileId } = payload as Record<string, unknown>
+  if (!Number.isSafeInteger(exp) || !Number.isSafeInteger(mediafileId)) {
+    throw new FilmaPlaybackError('INVALID_RESPONSE_SCHEMA')
+  }
+  return { expiresAt: Number(exp) * 1_000, mediafileId: Number(mediafileId) }
+}
+
+async function readWithAbort(
+  reader: ReadableStreamDefaultReader<Uint8Array>,
+  signal: AbortSignal,
+) {
+  if (signal.aborted) throw new FilmaPlaybackError('FILMA_UNAVAILABLE')
+  let rejectAborted!: (reason: FilmaPlaybackError) => void
+  const aborted = new Promise<never>((_resolve, reject) => {
+    rejectAborted = reject
+  })
+  const onAbort = () =>
+    rejectAborted(new FilmaPlaybackError('FILMA_UNAVAILABLE'))
+  signal.addEventListener('abort', onAbort, { once: true })
+  try {
+    return await Promise.race([reader.read(), aborted])
+  } finally {
+    signal.removeEventListener('abort', onAbort)
+  }
+}
+
 async function readBoundedJson(response: Response, signal: AbortSignal) {
   const contentLength = response.headers.get('Content-Length')
   if (contentLength !== null && Number(contentLength) > responseLimit) {
@@ -72,7 +195,7 @@ async function readBoundedJson(response: Response, signal: AbortSignal) {
   let length = 0
   try {
     while (true) {
-      const result = await reader.read()
+      const result = await readWithAbort(reader, signal)
       if (signal.aborted) throw new FilmaPlaybackError('FILMA_UNAVAILABLE')
       if (result.done) break
       length += result.value.byteLength
@@ -83,6 +206,7 @@ async function readBoundedJson(response: Response, signal: AbortSignal) {
       chunks.push(result.value)
     }
   } catch (error) {
+    if (signal.aborted) await reader.cancel().catch(() => undefined)
     if (error instanceof FilmaPlaybackError) throw error
     throw new FilmaPlaybackError('FILMA_UNAVAILABLE')
   } finally {
@@ -118,31 +242,41 @@ async function requestPlayback(input: PlaybackInput) {
   url.searchParams.set('jwt_expires_at', input.notAfter)
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), timeoutMs)
-  let response: Response
   try {
-    response = await (input.request ?? fetch)(url.toString(), {
-      method: 'GET',
-      redirect: 'error',
-      signal: controller.signal,
-      headers: {
-        Accept: 'application/json',
-        'X-Api-Key': input.apiKey,
-        Origin: input.allowedOrigin,
-      },
-    })
-  } catch {
-    throw new FilmaPlaybackError('FILMA_UNAVAILABLE')
+    let response: Response
+    try {
+      response = await (input.request ?? fetch)(url.toString(), {
+        method: 'GET',
+        redirect: 'error',
+        signal: controller.signal,
+        headers: {
+          Accept: 'application/json',
+          'X-Api-Key': input.apiKey,
+          Origin: input.allowedOrigin,
+        },
+      })
+    } catch {
+      throw new FilmaPlaybackError('FILMA_UNAVAILABLE')
+    }
+    if (response.status === 404) throw new FilmaPlaybackError('FILE_NOT_FOUND')
+    if (response.status === 401) {
+      await response.body?.cancel().catch(() => undefined)
+      throw new FilmaPlaybackError('INVALID_API_KEY')
+    }
+    if (response.status === 403) {
+      await response.body?.cancel().catch(() => undefined)
+      throw new FilmaPlaybackError('DOMAIN_NOT_ALLOWED')
+    }
+    if (response.status !== 200) {
+      await response.body?.cancel().catch(() => undefined)
+      throw new FilmaPlaybackError('FILMA_UNAVAILABLE')
+    }
+    return {
+      payload: await readBoundedJson(response, controller.signal),
+      notAfter,
+    }
   } finally {
     clearTimeout(timeout)
-  }
-  if (response.status === 404) throw new FilmaPlaybackError('FILE_NOT_FOUND')
-  if (response.status !== 200) {
-    await response.body?.cancel().catch(() => undefined)
-    throw new FilmaPlaybackError('FILMA_UNAVAILABLE')
-  }
-  return {
-    payload: await readBoundedJson(response, controller.signal),
-    notAfter,
   }
 }
 
@@ -166,11 +300,12 @@ function validatedPlayback(
   ) {
     throw new FilmaPlaybackError('INVALID_RESPONSE_SCHEMA')
   }
-  const expiresAt =
-    typeof record.expires_at === 'string' ? Date.parse(record.expires_at) : NaN
+  const claims = requireExpiry ? playbackJwtClaims(record.url) : null
+  const expiresAt = claims?.expiresAt ?? NaN
   if (
     requireExpiry &&
     (!Number.isFinite(expiresAt) ||
+      claims?.mediafileId !== record.mediafile_id ||
       expiresAt <= Date.now() ||
       expiresAt > notAfter)
   ) {

@@ -196,9 +196,19 @@ export function anonymousTransferStatements(
            ON anonymous_play_sessions.id = redemptions.anonymous_session_id
          WHERE anonymous_play_sessions.token_hash = ?
            AND anonymous_play_sessions.expires_at > ?
+           AND EXISTS (
+             SELECT 1 FROM accounts
+             WHERE accounts.id = ? AND accounts.role = 'viewer'
+           )
          ON CONFLICT(account_id, video_id) DO NOTHING`,
       )
-      .bind(input.accountId, input.now, input.tokenHash, input.now),
+      .bind(
+        input.accountId,
+        input.now,
+        input.tokenHash,
+        input.now,
+        input.accountId,
+      ),
     db
       .prepare(
         `UPDATE redemptions
@@ -206,15 +216,23 @@ export function anonymousTransferStatements(
          WHERE anonymous_session_id IN (
            SELECT id FROM anonymous_play_sessions
            WHERE token_hash = ? AND expires_at > ?
-         )`,
+         )
+           AND EXISTS (
+             SELECT 1 FROM accounts
+             WHERE accounts.id = ? AND accounts.role = 'viewer'
+           )`,
       )
-      .bind(input.accountId, input.tokenHash, input.now),
+      .bind(input.accountId, input.tokenHash, input.now, input.accountId),
     db
       .prepare(
         `UPDATE anonymous_play_sessions SET expires_at = ?
-         WHERE token_hash = ? AND expires_at > ?`,
+         WHERE token_hash = ? AND expires_at > ?
+           AND EXISTS (
+             SELECT 1 FROM accounts
+             WHERE accounts.id = ? AND accounts.role = 'viewer'
+           )`,
       )
-      .bind(input.now, input.tokenHash, input.now),
+      .bind(input.now, input.tokenHash, input.now, input.accountId),
   ]
 }
 
