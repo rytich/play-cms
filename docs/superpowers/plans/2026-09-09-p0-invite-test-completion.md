@@ -96,9 +96,14 @@
 
   `src/admin/routes.ts`が`/admin/filma`を固有画面として認識し、`AdminLayout`の「Filma連携」から遷移でき、direct open・reload・back・forwardで復元できることをtestで固定する。画面は未設定、確認中、接続済み、接続失敗だけを示し、保存済みキーを再表示しない。
 
-  実装着手の前提として、確認済み公式仕様を固定した[Filma playback contract](../../development/filma-playback-contract.md#確認した契約)の「動画存在確認・再生情報取得」を根拠に、識別・検証APIが`GET /filmaapi/storage/{id}`、pathの`id`がファイルID、必要なresponse fieldが`url`と`mediafile_id`であることを確認する。固定した公式資料へ到達できない、実契約が資料と一致しない、または成功・不存在・権限エラーのstatusとschemaを安全に分類できない場合はStep 4を停止し、#16へ未確認事項を記録する。別endpointやfieldを推測せず、動画をD1へ保存しない。
+  実装着手の前提として、確認済み公式仕様を固定した[Filma playback contract](../../development/filma-playback-contract.md#確認した契約)の「動画存在確認・再生情報取得」とエラー仕様を根拠に、次の識別・受入規則をtestで固定する。
 
-  契約確認後の動画作成・更新は、暗号化済みキーを復号し、同APIが対象ファイルを返し、`mediafile_id`、公開状態、再生情報が契約を満たした場合だけD1へ保存する。認証、到達性、存在、契約の失敗時は動画を新規作成・更新せず、秘密を含まない503または入力対象を示さない404へ変換する。
+  - 管理者が送信した`filmaFileId`は`^[1-9]\\d{0,19}$`の正規形だけを許可し、その文字列を`GET /filmaapi/storage/{id}`のpath `id`へ一度だけpercent-encodeして渡す。成功時もこの入力値だけを`videos.filma_file_id`へ保存する。
+  - responseの`mediafile_id`はエンコード済みファイルを示す別識別子であり、入力`filmaFileId`との一致を要求せず、入力値を上書きしない。正のsafe integerであることを検証し、そのresponse内のHTTPS `url`と再生grantの対象確認だけに使う。
+  - `show_all`は送らない。公式仕様上は公開ファイルだけが200となるため、文書にない`published` fieldを推測しない。200かつ64 KiB以下のJSON objectで、`url`が許可済みFilma hostのHTTPS URL、`mediafile_id`が上記条件を満たす場合だけschema成功候補とする。
+  - pinned error contractに従い、404は不存在として保存せず管理入力エラー、401/403は認証・権限設定エラーとして保存せず503、redirect・その他status・timeout・過大body・不正schemaは保存せず503へ閉じる。response bodyと識別子をログへ出さない。
+
+  専用テスト動画、存在しない予約済みID、無効なテスト認証、拒否originを使うlive contract testで、200、404、401、403の実statusと200 schemaが上記分類に一致することを確認するまでproductionの動画作成・更新へ接続しない。固定した公式資料へ到達できない、実契約が資料と一致しない、またはstatus/schemaを安全に分類できない場合はStep 4を停止して#16へ未確認事項を記録する。別endpointやfieldを推測せず、動画をD1へ保存しない。
 
 - [ ] **Step 5: キー消費・管理表示・権利移行の失敗テストを書く**
 
