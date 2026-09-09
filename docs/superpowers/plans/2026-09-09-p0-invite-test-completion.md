@@ -1,6 +1,6 @@
 # P0 Invite Test Completion Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **Execution workflow:** リポジトリの[AGENTS.md](../../../AGENTS.md)に従い、同じ5.6 Sol実装担当がtaskを順に実行し、別担当が[play-cms reviewer](../../../.agents/skills/play-cms-reviewer/SKILL.md)で独立レビューする。外部のagent skillは任意かつ非blockingであり、利用できなくてもこのcheckbox順で実行する。
 
 **Goal:** 使い切り閲覧キーから期限内の再視聴までを完成させ、Cloudflare D1へmigrationして3〜5名が操作できる招待テスト環境を用意する。
 
@@ -70,11 +70,19 @@
 
 - [ ] **Step 1: Filma再生契約専用のlive testでGO条件を確認する**
 
-  既存の`pnpm test:filma:live`はtoken endpointの認証だけを確認するため、再生GOの証拠に使わない。通常CIから除外した`pnpm test:filma:playback:live`を追加し、Git管理外の`FILMA_LIVE_API_KEY`、`FILMA_LIVE_FILE_ID`、`FILMA_LIVE_ALLOWED_ORIGIN`、`FILMA_LIVE_DENIED_ORIGIN`が全てある場合だけ手動実行する。
+  既存の`pnpm test:filma:live`はtoken endpointの認証だけを確認するため、再生GOの証拠に使わない。`test:filma:playback:live`はこの文書PRのheadにはまだ存在せず、Task 1 Step 1で最初に作るdeliverableとする。`tests/live/filma-playback.live.test.ts`と`vitest.playback-live.config.ts`を作成し、通常CIの`verify`から除外した同名scriptを`package.json`へ追加する。`pnpm run`の一覧に同scriptが表示されることをcommand-discoveryの受入条件とする。
+
+  Git管理外の`FILMA_LIVE_API_KEY`、`FILMA_LIVE_FILE_ID`、`FILMA_LIVE_ALLOWED_ORIGIN`、`FILMA_LIVE_DENIED_ORIGIN`が全てある場合だけ手動実行する。4変数のいずれかがない状態ではFilmaへrequestを送らず、変数名だけを含む`FILMA_LIVE_CONFIG_MISSING`で明示的に失敗することをtestで固定する。値、APIキー、動画ID、URLは出力しない。
 
   専用テストは、公開済みの専用動画一件に対して`jwt_expires_at = now + 10秒`を指定し、返却URL内tokenの非null期限が指定値以下であること、許可originで再生開始できること、拒否originで403になること、11秒後に同じgrantとrefreshの両方が拒否されることを確認する。status、期限比較、確認項目名だけを出力し、APIキー、動画ID、JWT、URL、応答本文を出力しない。
 
-  現行公式仕様はJWTへdomain制限を適用しないと明記しているため、仕様が変わらない限り拒否origin testは失敗し、#16はNO-GOのままとなる。この場合はproduction codeとキー消費へ進まない。P0招待試験だけdomain制限を緩和する場合も黙ってtestを削除せず、ユーザー承認、動画単位・5分以下のtoken、テスト動画限定、一般公開前に再度停止する条件をADRへ保存してから、計画と#16を更新する。
+  結果は次の3種類に分け、statusと分類名だけを#16へ記録する。
+
+  - `all-conditions-passed`: 有効期限、許可origin、拒否origin、期限後grant、期限後refreshの全条件を確認できた場合だけGO候補とする。
+  - `contract-denied`: Filmaへの到達と認証は成立したが、拒否originでも再生できる、または期限後のgrant/refreshが受理されるなど、必須security条件が満たされないことを実証できた場合。現行公式仕様ではJWTへdomain制限を適用しないため、これを期待されるNO-GO結果とし、production codeとキー消費へ進まない。
+  - `test-infrastructure-error`: 変数不足、認証失敗、timeout、DNS、予期しないstatus/schemaなど、契約成立・不成立を判定できない場合。原因を調査するまで停止し、これを`contract-denied`またはGOとして扱わない。
+
+  P0招待試験だけdomain制限を緩和する場合も黙ってtestを削除せず、ユーザー承認、動画単位・5分以下のtoken、テスト動画限定、一般公開前に再度停止する条件をADRへ保存してから、計画と#16を更新する。
 
 - [ ] **Step 2: migrationとcoreの失敗テストを書く**
 
