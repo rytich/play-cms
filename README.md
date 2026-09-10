@@ -4,7 +4,7 @@ play-cmsは、Filmaと連携する小規模な動画CMSとして公開リポジ�
 
 ## 現在の状態
 
-localhost限定で、管理者機能に加えて視聴者登録・ログインと合成視聴権のライブラリを試作中です。コード消費、公開再生、実Filma連携、本番の視聴権付与は無効です。
+localhost限定で、管理者機能、視聴者認証とライブラリ、使い切りコードの合成視聴フローを試作中です。実Filma再生と一般公開はGO判定前のため既定で無効です。
 
 ## ライセンス
 
@@ -26,6 +26,7 @@ pnpm verify
 - [P0招待テスト完了計画](docs/superpowers/plans/2026-09-09-p0-invite-test-completion.md)
 - [一覧絞り込み・一括状態変更の操作とmigration](docs/development/bulk-management.md)
 - [視聴者認証と視聴権ライブラリ](docs/development/viewer-auth-library.md)
+- [使い切り視聴フロー](docs/development/viewing-flow.md)
 - [視聴者認証・ライブラリ実装計画](docs/superpowers/plans/2026-09-09-viewer-auth-library-implementation.md)
 - [Issueの現在状態](docs/development/issue-status.md)
 - [テーマ差し替え・管理者／視聴者UI仕様（管理UI実装済み・ブラウザ受入一部未完了）](docs/superpowers/specs/2026-09-08-ui-theme-navigation-design.md)
@@ -41,7 +42,7 @@ pnpm verify
 ## 開発状況
 
 - [Issue #34: 現行要件の集約](https://github.com/rytich/play-cms/issues/34)
-- [Issue #35: 使い切りキー・匿名視聴・視聴権引き継ぎ](https://github.com/rytich/play-cms/issues/35)
+- [Issue #35: 使い切りキー・匿名視聴・視聴権引き継ぎ](https://github.com/rytich/play-cms/issues/35) / [PR #42](https://github.com/rytich/play-cms/pull/42)
 - [Issue #36: D1 migrationとCloudflare招待環境](https://github.com/rytich/play-cms/issues/36)
 - [Issue #37: 3〜5名の招待操作確認](https://github.com/rytich/play-cms/issues/37)
 - [Issue #16: Filma再生契約のGO/NO-GO](https://github.com/rytich/play-cms/issues/16)

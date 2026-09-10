@@ -13,6 +13,7 @@ export default defineConfig(async () => ({
           PLAY_LOCAL_ONLY: 'true',
           PLAY_BOOTSTRAP_TOKEN: 'a'.repeat(64),
           PLAY_RATE_LIMIT_KEY: 'b'.repeat(64),
+          PLAY_ENCRYPTION_KEY: '12'.repeat(32),
         },
       },
     }),

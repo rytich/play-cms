@@ -3,6 +3,7 @@
 - 確認日: 2026-09-07
 - Tracking: [GitHub Issue #16](https://github.com/rytich/play-cms/issues/16)
 - Review: [GitHub PR #17](https://github.com/rytich/play-cms/pull/17)
+- P0実装: [GitHub Issue #35](https://github.com/rytich/play-cms/issues/35) / [GitHub PR #42](https://github.com/rytich/play-cms/pull/42)
 - 設計: [P0プロトタイプ設計](../superpowers/specs/2026-09-07-p0-prototype-design.md)
 - 計画: [P0 Task 2](../superpowers/plans/2026-09-07-p0-prototype-implementation.md#task-2-filmaの既存動画再生契約を4時間で確定する)
 - 対象環境: 専用テスト組織用に設定済みのローカル認証情報。動画の作成・更新・削除なし。
@@ -13,7 +14,7 @@
 公式公開資料のソース `moguracream/filma-docs` のmasterが、確認時点で `3ad90bdef3537d3a4e79177d7cd22dcb4b7550d5` であることをGitHub APIで確認した。以下はその版の仕様であり、今回の実API成功を示すものではない。
 
 - 認証方式: `X-Api-Key`ヘッダーで `POST https://filma.biz/filmaapi/token`。`mediafile_id`による動画限定と、`jwt_expires_at`による絶対期限指定が記載されている。必要fieldは `token`、`expires_at`、`mediafile_id`。CMSではキーをクエリへ載せない。[トークン発行仕様](https://github.com/moguracream/filma-docs/blob/3ad90bdef3537d3a4e79177d7cd22dcb4b7550d5/api-spec/docs/04-endpoints.md#L25-L85)
-- 動画存在確認・再生情報取得: `GET https://filma.biz/filmaapi/storage/{videoId}`。このpathのIDは**ファイルID**で、返却される `mediafile_id` と同一視しない。必要fieldは `url`、`mediafile_id`。`jwt_expires_at`を指定でき、省略時は現在時刻から1時間。既存動画1件の取得、成功・不存在・権限エラーの実status分類は今回未確認。[ファイル再生情報仕様](https://github.com/moguracream/filma-docs/blob/3ad90bdef3537d3a4e79177d7cd22dcb4b7550d5/api-spec/docs/04-endpoints.md#L409-L450)
+- 動画存在確認・再生情報取得: `GET https://filma.biz/filmaapi/storage/{videoId}`。このpathのIDは**ファイルID**で、返却される `mediafile_id`（エンコード済みファイル識別子）と同一視しない。必要fieldは `url`、`mediafile_id`。`jwt_expires_at`を指定でき、省略時は現在時刻から1時間。一般エラー仕様は401を認証、403を権限、404を不存在、500を内部エラーと定義するが、このendpointでの成功・不存在・権限エラーの実status/schemaは今回未確認。[ファイル再生情報仕様](https://github.com/moguracream/filma-docs/blob/3ad90bdef3537d3a4e79177d7cd22dcb4b7550d5/api-spec/docs/04-endpoints.md#L409-L469)／[エラー仕様](https://github.com/moguracream/filma-docs/blob/3ad90bdef3537d3a4e79177d7cd22dcb4b7550d5/api-spec/docs/06-error-responses.md#L3-L10)
 - 有効期限: 絶対期限の指定方法は記載されている。一方、CMSの `notAfter = min(現在+5分, 動画公開終了)` を、返却情報および既発行情報の利用時に守れることは未確認。期限情報がない、または指定期限を超える場合は許可しない。
 - domain制限: APIキー認証にはReferer/Originによる制限があるが、**JWT認証にはドメイン制限が適用されない**と明記されている。APIキー側の制限をJWT再生側の保証として扱わない。[認証仕様](https://github.com/moguracream/filma-docs/blob/3ad90bdef3537d3a4e79177d7cd22dcb4b7550d5/api-spec/docs/02-authentication.md#L127-L165)
 - 更新後の期限: JWT更新APIの記載はあるが、CMS指定の絶対終了期限が更新後にも保持されるかは資料だけでは確定できない。実際に期限超過が可能だったとは判断していない。[更新仕様](https://github.com/moguracream/filma-docs/blob/3ad90bdef3537d3a4e79177d7cd22dcb4b7550d5/api-spec/docs/04-endpoints.md#L180-L195)
@@ -27,7 +28,7 @@
 
 ## 再開条件
 
-P0のGO条件のうちdomain制限が公式仕様と一致せず、期限終了後の遮断も未確認のため、4時間の上限まで試行を繰り返さずNO-GOとした。Task 2の停止条件に従い、推測adapterとTasks 3〜6は開始しない。
+一般公開のGO条件のうちdomain制限が公式仕様と一致せず、期限終了後の遮断も未確認のため、4時間の上限まで試行を繰り返さずNO-GOとした。[ADR 0003](../decisions/0003-allow-limited-p0-playback-without-domain-binding.md)の条件下では、mockを使う後続実装を進められる。ただし実Filmaで動画限定・5分以下の期限を確認できるまで、実再生と閲覧キー消費を有効にしない。
 
 Filma側へ確認する項目は次の3点に絞る。
 
@@ -36,3 +37,5 @@ Filma側へ確認する項目は次の3点に絞る。
 3. 専用テスト組織の既存動画1件で、認証・再生・期限後の拒否を確認できる接続条件。実IDやキーは非公開設定で扱う。
 
 開発順序の代替案は2026-09-07に承認され、[管理機能の先行プロトタイプ](admin-first-prototype.md)として管理画面・動画登録・使い切りコード管理を先行した。NO-GOは変更せず、実動画公開は無効のままである。再開時は#16の三条件を再確認し、成立しない状態で閲覧キーを消費しない。
+
+[Issue #35の視聴フロー](viewing-flow.md)はmockで製品境界を実装したが、本節のNO-GOは維持する。実storage契約の状態とschemaを確認するまで、動画保存前確認は作成・更新APIへ接続しない。

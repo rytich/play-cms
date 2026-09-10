@@ -80,11 +80,11 @@ describe('Filma live token contract', () => {
     expect(result).toEqual({
       status: 200,
       fields: ['organization_id', 'api_type'],
+      organizationId,
       apiType: 'readonly',
     })
     expect(JSON.stringify(result)).not.toContain(apiKey)
     expect(JSON.stringify(result)).not.toContain(jwt)
-    expect(JSON.stringify(result)).not.toContain(String(organizationId))
   })
 
   it.each([

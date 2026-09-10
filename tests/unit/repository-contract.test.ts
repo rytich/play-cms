@@ -162,6 +162,17 @@ describe('repository contract', () => {
     expect(specification).toContain('Node.js 22.13.0以上の22.x、または24以上')
   })
 
+  it('loads local live variables only for the explicit playback contract command', async () => {
+    const packageJson = JSON.parse(await readFile('package.json', 'utf8')) as {
+      scripts: Record<string, string>
+    }
+
+    expect(packageJson.scripts['test:filma:playback:live']).toBe(
+      'node --env-file-if-exists=.dev.vars ./node_modules/vitest/vitest.mjs run --config vitest.playback-live.config.ts',
+    )
+    expect(packageJson.scripts.verify).not.toContain('.dev.vars')
+  })
+
   it('states the current unlicensed repository status without claiming open source', async () => {
     const readme = await readFile('README.md', 'utf8')
 
@@ -174,6 +185,39 @@ describe('repository contract', () => {
     const workflow = await readFile('docs/development/workflow.md', 'utf8')
 
     expect(workflow).toContain('https://github.com/rytich/play-cms/issues/1')
+  })
+
+  it('requires exact-head browser evidence for navigation or authentication changes', async () => {
+    for (const path of ['CONTRIBUTING.md', 'docs/development/workflow.md']) {
+      const policy = await readFile(path, 'utf8')
+
+      expect(policy).toContain('viewer/admin')
+      expect(policy).toContain('navigation')
+      expect(policy).toContain('authentication')
+      expect(policy).toContain('exact-head')
+      expect(policy).toContain('pnpm test:browser:viewing')
+      expect(policy).toContain('merge')
+    }
+  })
+
+  it('runs the viewing-flow browser acceptance in the required CI gate', async () => {
+    const packageJson = JSON.parse(await readFile('package.json', 'utf8')) as {
+      scripts: Record<string, string>
+      devDependencies: Record<string, string>
+    }
+    const workflow = await readFile('.github/workflows/ci.yml', 'utf8')
+    const harness = await readFile('tests/browser/viewing-flow.mjs', 'utf8')
+
+    expect(packageJson.devDependencies.playwright).toBe('1.63.0')
+    expect(packageJson.scripts['test:browser:viewing']).toContain(
+      'tests/browser/viewing-flow.mjs',
+    )
+    expect(workflow).toContain(
+      'pnpm exec playwright install --with-deps chromium',
+    )
+    expect(workflow).toContain('pnpm test:browser:viewing')
+    expect(harness).toContain("env.PLAYWRIGHT_MODULE_PATH ?? 'playwright'")
+    expect(harness).toContain('env.PLAYWRIGHT_CHROME_PATH')
   })
 
   it('documents staged build and CI merge gates before Tasks 7 and 8', async () => {

@@ -27,6 +27,7 @@ function messageForStatus(status: number) {
   if (status === 401)
     return 'メールアドレスまたはパスワードを確認してください。'
   if (status === 403) return 'この操作は許可されていません。'
+  if (status === 404) return 'コードまたは視聴権を確認できません。'
   if (status === 409) return 'この内容では登録できません。'
   if (status === 429) return '時間をおいてからもう一度お試しください。'
   return '現在処理できません。時間をおいてもう一度お試しください。'

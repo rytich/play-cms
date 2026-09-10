@@ -261,32 +261,45 @@ export async function listAccessCodes(
 ) {
   const video = await findVideo(db, videoId)
   if (!video) return null
-  const where = ['video_id = ?']
+  const where = ['access_codes.video_id = ?']
   const bindings: (string | number)[] = [videoId]
   if (filters.codeId) {
-    where.push('id = ?')
+    where.push('access_codes.id = ?')
     bindings.push(filters.codeId)
   }
   if (filters.setting) {
-    where.push('is_enabled = ?')
+    where.push('access_codes.is_enabled = ?')
     bindings.push(filters.setting === 'enabled' ? 1 : 0)
   }
-  if (filters.lifecycle === 'unused') where.push('revoked_at IS NULL')
-  if (filters.lifecycle === 'revoked') where.push('revoked_at IS NOT NULL')
-  if (filters.lifecycle === 'used') where.push('0 = 1')
+  if (filters.lifecycle === 'unused') {
+    where.push(
+      'access_codes.revoked_at IS NULL AND redemptions.code_id IS NULL',
+    )
+  }
+  if (filters.lifecycle === 'revoked') {
+    where.push(
+      'access_codes.revoked_at IS NOT NULL AND redemptions.code_id IS NULL',
+    )
+  }
+  if (filters.lifecycle === 'used')
+    where.push('redemptions.code_id IS NOT NULL')
   if (filters.issuedFrom) {
-    where.push('created_at >= ?')
+    where.push('access_codes.created_at >= ?')
     bindings.push(Math.ceil(Date.parse(filters.issuedFrom) / 1_000))
   }
   if (filters.issuedTo) {
-    where.push('created_at < ?')
+    where.push('access_codes.created_at < ?')
     bindings.push(Math.ceil(Date.parse(filters.issuedTo) / 1_000))
   }
   const rows = await db
     .prepare(
-      `SELECT id, created_at, revoked_at, is_enabled FROM access_codes
+      `SELECT access_codes.id, access_codes.created_at,
+              access_codes.revoked_at, access_codes.is_enabled,
+              redemptions.redeemed_at
+       FROM access_codes
+       LEFT JOIN redemptions ON redemptions.code_id = access_codes.id
        WHERE ${where.join(' AND ')}
-       ORDER BY created_at DESC, id DESC
+       ORDER BY access_codes.created_at DESC, access_codes.id DESC
        LIMIT 101 OFFSET ?`,
     )
     .bind(...bindings, filters.offset)
@@ -295,6 +308,7 @@ export async function listAccessCodes(
       created_at: number
       revoked_at: number | null
       is_enabled: number
+      redeemed_at: number | null
     }>()
   return {
     codes: rows.results.slice(0, 100),
@@ -364,7 +378,11 @@ export async function bulkUpdateAccessCodes(
         `SELECT
            (SELECT COUNT(*) FROM videos WHERE id = ?) AS video_count,
            COUNT(*) AS found_count,
-           COALESCE(SUM(revoked_at IS NOT NULL), 0) AS conflict_count,
+           COALESCE(SUM(
+             revoked_at IS NOT NULL OR EXISTS (
+               SELECT 1 FROM redemptions WHERE redemptions.code_id = access_codes.id
+             )
+           ), 0) AS conflict_count,
            COALESCE(SUM(is_enabled = ?), 0) AS unchanged_count,
            (SELECT COUNT(*) FROM videos WHERE id = ? AND ends_at > ?) AS active_count
          FROM access_codes
@@ -377,6 +395,9 @@ export async function bulkUpdateAccessCodes(
          WHERE video_id = ?
            AND id IN (SELECT value FROM json_each(?))
            AND revoked_at IS NULL AND is_enabled <> ?
+           AND NOT EXISTS (
+             SELECT 1 FROM redemptions WHERE redemptions.code_id = access_codes.id
+           )
            AND (? = 0 OR EXISTS (
              SELECT 1 FROM videos WHERE id = ? AND ends_at > ?
            ))
@@ -432,14 +453,36 @@ export async function revokeAccessCode(
   codeId: string,
   now: number,
 ) {
-  const result = await db
-    .prepare(
-      `UPDATE access_codes SET revoked_at = ?
-       WHERE id = ? AND video_id = ? AND revoked_at IS NULL`,
-    )
-    .bind(now, codeId, videoId)
-    .run()
-  return result.meta.changes === 1
+  const results = await db.batch([
+    db
+      .prepare(
+        `SELECT COUNT(*) AS found_count,
+                COALESCE(SUM(EXISTS (
+                  SELECT 1 FROM redemptions
+                  WHERE redemptions.code_id = access_codes.id
+                )), 0) AS used_count
+         FROM access_codes WHERE id = ? AND video_id = ?`,
+      )
+      .bind(codeId, videoId),
+    db
+      .prepare(
+        `UPDATE access_codes SET revoked_at = ?
+         WHERE id = ? AND video_id = ? AND revoked_at IS NULL
+           AND NOT EXISTS (
+             SELECT 1 FROM redemptions WHERE redemptions.code_id = access_codes.id
+           )`,
+      )
+      .bind(now, codeId, videoId),
+  ])
+  const row = results[0]!.results[0] as {
+    found_count: number
+    used_count: number
+  }
+  if (row.found_count !== 1) return { kind: 'not-found' as const }
+  if (row.used_count > 0) return { kind: 'conflict' as const }
+  return results[1]!.meta.changes === 1
+    ? { kind: 'ok' as const }
+    : { kind: 'not-found' as const }
 }
 
 export async function incrementRateLimits(

@@ -14,6 +14,7 @@ import {
   parseViewerRegistration,
 } from '../../src/core/viewer'
 import {
+  FilmaPlaybackFrame,
   ViewerAuthForm,
   ViewerLibrary,
   performViewerLogout,
@@ -22,12 +23,29 @@ import {
 afterEach(() => vi.unstubAllGlobals())
 
 describe('viewer client', () => {
+  it('embeds the Filma player without rendering a native video element', () => {
+    const player = renderToStaticMarkup(
+      createElement(FilmaPlaybackFrame, {
+        url: 'https://filma.biz/player/synthetic',
+        title: 'Synthetic viewing title',
+      }),
+    )
+
+    expect(player).toContain('<iframe')
+    expect(player).toContain('src="https://filma.biz/player/synthetic"')
+    expect(player).toContain('title="Filmaプレーヤー: Synthetic viewing title"')
+    expect(player).toContain('allow="fullscreen"')
+    expect(player).toContain('allowFullScreen=""')
+    expect(player).not.toContain('<video')
+  })
+
   it('renders distinct viewer auth forms without persistent credential fields', () => {
     const register = renderToStaticMarkup(
       createElement(ViewerAuthForm, {
         mode: 'register',
         busy: false,
         error: '',
+        returnTo: '/v/public-a',
         onSubmit: () => {},
       }),
     )
@@ -40,7 +58,7 @@ describe('viewer client', () => {
       }),
     )
     expect(register).toContain('視聴者登録')
-    expect(register).toContain('href="/login"')
+    expect(register).toContain('href="/login?returnTo=%2Fv%2Fpublic-a"')
     expect(login).toContain('視聴者ログイン')
     expect(login).toContain('href="/register"')
     expect(register).not.toContain('localStorage')
@@ -60,6 +78,7 @@ describe('viewer client', () => {
       createElement(ViewerLibrary, { videos: [], onLogout: () => {} }),
     )
     expect(list).toContain('Synthetic title')
+    expect(list).toContain('href="/v/public-a"')
     expect(list).toContain('2100')
     expect(list).not.toContain(item.description)
     expect(empty).toContain('現在視聴できる動画はありません')

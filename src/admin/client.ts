@@ -6,6 +6,11 @@ export type IssuedCode = {
   createdAt: string
 }
 
+export type FilmaConnection = {
+  configured: boolean
+  verifiedAt: string | null
+}
+
 export function newPasswordValidationError(password: string) {
   return validNewPassword(password)
     ? null
@@ -122,4 +127,12 @@ export async function adminRequest<T>(
       null,
     )
   }
+}
+
+export function loadFilmaConnection() {
+  return adminRequest<FilmaConnection>('/api/admin/filma')
+}
+
+export function saveFilmaConnection(apiKey: string) {
+  return adminRequest<FilmaConnection>('/api/admin/filma', 'PUT', { apiKey })
 }

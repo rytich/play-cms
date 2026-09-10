@@ -28,7 +28,9 @@ import {
   adminRequest,
   loginPasswordValidationError,
   localDateTime,
+  loadFilmaConnection,
   newPasswordValidationError,
+  saveFilmaConnection,
   toIsoDateTime,
 } from './client'
 import {
@@ -59,7 +61,7 @@ type CodeMetadata = {
   id: string
   createdAt: string
   revokedAt: string | null
-  status: 'unused' | 'revoked'
+  status: 'unused' | 'used' | 'revoked'
   enabled: boolean
 }
 
@@ -312,10 +314,12 @@ function ProtectedLayout({
   returnTo = '/admin/videos',
   onVideos,
   onLogout,
+  currentPage,
   children,
 }: ProtectedPageProps & {
   returnTo?: string
   onVideos?: () => boolean | void
+  currentPage?: 'videos' | 'filma'
   children: ReactNode
 }) {
   return (
@@ -324,10 +328,99 @@ function ProtectedLayout({
       logoPath={brand.logoPath}
       videosHref={returnTo}
       onVideos={onVideos ?? (() => true)}
+      currentPage={currentPage}
       onLogout={onLogout}
     >
       {children}
     </AdminLayout>
+  )
+}
+
+function FilmaSettingsPage({ onLogout, onUnauthorized }: ProtectedPageProps) {
+  const [apiKey, setApiKey] = useState('')
+  const [state, setState] = useState<
+    '未設定' | '確認中' | '接続済み' | '接続失敗'
+  >('確認中')
+  const [busy, setBusy] = useState(false)
+  const heading = usePageHeading('Filma連携')
+
+  const load = useCallback(async () => {
+    setState('確認中')
+    try {
+      const result = await loadFilmaConnection()
+      setState(result.configured ? '接続済み' : '未設定')
+    } catch (caught) {
+      if (caught instanceof AdminRequestError && caught.status === 401) {
+        onUnauthorized()
+      } else {
+        setState('接続失敗')
+      }
+    }
+  }, [onUnauthorized])
+
+  useEffect(() => {
+    void load()
+  }, [load])
+
+  async function submit(event: FormEvent) {
+    event.preventDefault()
+    if (busy || !apiKey) return
+    setBusy(true)
+    setState('確認中')
+    try {
+      await saveFilmaConnection(apiKey)
+      setState('接続済み')
+    } catch (caught) {
+      if (caught instanceof AdminRequestError && caught.status === 401) {
+        onUnauthorized()
+      }
+      setState('接続失敗')
+    } finally {
+      setApiKey('')
+      setBusy(false)
+    }
+  }
+
+  return (
+    <ProtectedLayout
+      currentPage="filma"
+      onLogout={onLogout}
+      onUnauthorized={onUnauthorized}
+    >
+      <section aria-labelledby="filma-heading">
+        <div className="page-heading">
+          <div>
+            <h1 ref={heading} id="filma-heading" tabIndex={-1}>
+              Filma連携
+            </h1>
+            <p className="subtle">
+              APIキーは接続確認後に暗号化して保存し、再表示しません。
+            </p>
+          </div>
+        </div>
+        <div className="card narrow">
+          <p role="status">
+            接続状態: <strong>{state}</strong>
+          </p>
+          <form onSubmit={(event) => void submit(event)}>
+            <label>
+              Filma APIキー
+              <input
+                type="password"
+                autoComplete="off"
+                required
+                maxLength={4096}
+                value={apiKey}
+                onChange={(event) => setApiKey(event.target.value)}
+              />
+            </label>
+            <button type="submit" disabled={busy || !apiKey}>
+              {busy ? '確認中…' : '接続を確認して保存'}
+            </button>
+          </form>
+        </div>
+      </section>
+    </ProtectedLayout>
   )
 }
 
@@ -1268,7 +1361,11 @@ function VideoCodesPage({
                     />
                     <div>
                       <strong>
-                        {code.status === 'unused' ? '未使用' : '取消済み'}
+                        {code.status === 'unused'
+                          ? '未使用'
+                          : code.status === 'used'
+                            ? '使用済み'
+                            : '取消済み'}
                       </strong>
                       <span>{code.enabled ? '設定: 有効' : '設定: 無効'}</span>
                       <span>
@@ -1290,9 +1387,6 @@ function VideoCodesPage({
                 ))}
               </ul>
             )}
-            <p className="subtle">
-              使用済みは引換機能未実装のため現在0件です。実引換・視聴権は未実装です。
-            </p>
             <nav className="pager" aria-label="閲覧用キー一覧のページ送り">
               {activeCodeFilters.offset === 0 ? (
                 <span className="pager-disabled" aria-disabled="true">
@@ -1425,6 +1519,7 @@ function App() {
       'new-video',
       'edit-video',
       'video-codes',
+      'filma',
     ].includes(route.kind)
     if (authenticated === false && protectedRoute) {
       window.location.replace(
@@ -1482,7 +1577,10 @@ function App() {
   if (route.kind === 'new-video' || route.kind === 'edit-video') {
     return <VideoEditorPage {...common} route={route} />
   }
-  return <VideoCodesPage {...common} route={route} />
+  if (route.kind === 'video-codes') {
+    return <VideoCodesPage {...common} route={route} />
+  }
+  return <FilmaSettingsPage {...common} />
 }
 
 const root = document.querySelector('#root')
@@ -1490,9 +1588,9 @@ if (!(root instanceof HTMLElement)) {
   throw new Error('Admin root element was not found')
 }
 
-const viewerEntry = ['/register', '/login', '/library'].includes(
-  window.location.pathname,
-)
+const viewerEntry =
+  ['/register', '/login', '/library'].includes(window.location.pathname) ||
+  window.location.pathname.startsWith('/v/')
 
 createRoot(root).render(
   <StrictMode>{viewerEntry ? <ViewerApp /> : <App />}</StrictMode>,

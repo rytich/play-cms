@@ -1,3 +1,11 @@
 # Copy this file to .dev.vars and replace the values locally.
 # Never commit .dev.vars or paste its values into Issue, PR, chat, or logs.
 FILMA_LIVE_API_KEY=replace-with-a-dedicated-test-key
+# The playback live gate additionally requires a dedicated published file,
+# a confirmed nonexistent file ID, an intentionally invalid test credential,
+# and the two test origins. Never use production identifiers or credentials.
+FILMA_LIVE_FILE_ID=replace-with-dedicated-published-file-id
+FILMA_LIVE_NOT_FOUND_FILE_ID=replace-with-confirmed-nonexistent-file-id
+FILMA_LIVE_INVALID_API_KEY=replace-with-intentionally-invalid-test-key
+FILMA_LIVE_ALLOWED_ORIGIN=https://replace-with-allowed-test-origin.example
+FILMA_LIVE_DENIED_ORIGIN=https://replace-with-denied-test-origin.example

@@ -1,4 +1,5 @@
 import type { ViewerLibraryRow } from '../../core/viewer'
+import { anonymousTransferStatements } from './viewing-repository'
 
 type ViewerAccountRow = {
   id: string
@@ -26,6 +27,7 @@ export async function createViewerWithSession(
     tokenHash: string
     expiresAt: number
     now: number
+    anonymousTokenHash?: string | null
   },
 ) {
   const results = await db.batch([
@@ -60,8 +62,57 @@ export async function createViewerWithSession(
         input.now,
         input.accountId,
       ),
+    ...(input.anonymousTokenHash
+      ? anonymousTransferStatements(db, {
+          tokenHash: input.anonymousTokenHash,
+          accountId: input.accountId,
+          now: input.now,
+        })
+      : []),
   ])
   return results[1]!.meta.changes === 1 && results[2]!.meta.changes === 1
+}
+
+export async function createViewerSessionWithTransfer(
+  db: D1Database,
+  input: {
+    id: string
+    tokenHash: string
+    accountId: string
+    expiresAt: number
+    now: number
+    anonymousTokenHash?: string | null
+  },
+) {
+  await db.batch([
+    db
+      .prepare(
+        `DELETE FROM sessions WHERE id IN (
+         SELECT id FROM sessions WHERE expires_at <= ? LIMIT 100
+       )`,
+      )
+      .bind(input.now),
+    db
+      .prepare(
+        `INSERT INTO sessions
+           (id, token_hash, account_id, expires_at, created_at)
+         VALUES (?, ?, ?, ?, ?)`,
+      )
+      .bind(
+        input.id,
+        input.tokenHash,
+        input.accountId,
+        input.expiresAt,
+        input.now,
+      ),
+    ...(input.anonymousTokenHash
+      ? anonymousTransferStatements(db, {
+          tokenHash: input.anonymousTokenHash,
+          accountId: input.accountId,
+          now: input.now,
+        })
+      : []),
+  ])
 }
 
 export function findSessionAccount(

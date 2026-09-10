@@ -68,6 +68,20 @@
   color: var(--play-color-muted);
 }
 
+.viewing-player {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  margin-block: 20px;
+  border: 0;
+  background: #000;
+}
+
+.viewing-auth-actions {
+  display: flex;
+  gap: 16px;
+}
+
 .viewer-empty,
 .viewer-loading {
   padding: 44px 8px;

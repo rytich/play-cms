@@ -23,6 +23,8 @@ PR本文はtemplateを正本とし、Issue/Task、承認済み設計・計画、
 
 Cloudflare用とNode.js用のビルドをTask 7で導入するまでは、Task固有テストとその時点の`pnpm verify`を実行し、結果をIssueとPRへ記録します。導入後は両環境のビルドも必須です。Task 8でCIを導入するまでは、記録済みのローカル検証、独立レビュー、文書更新をマージ条件とします。導入後はCI成功も確認します。
 
+CIの必須`verify` jobは、通常検証に続けて固定版Playwright用Chromiumを導入し、`pnpm test:browser:viewing`を実行します。viewer/adminのnavigationまたはauthentication flowを変更するPRは、このbrowser受入を含むexact-headの必須check成功をマージ前提とします。この合成browser証拠は実Worker、D1、Filmaの確認を代替しません。
+
 ## コミット
 
 コミットメッセージは`feat:`、`fix:`、`docs:`、`test:`、`refactor:`、`chore:`、`ci:`のいずれかで始め、1コミットの目的を明確にします。

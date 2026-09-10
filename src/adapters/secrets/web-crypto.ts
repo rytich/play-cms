@@ -76,6 +76,41 @@ export async function sha256Hex(value: string) {
   )
 }
 
+async function aesKey(secretHex: string, usage: KeyUsage[]) {
+  if (secretHex.length !== 64 || !HEX.test(secretHex)) {
+    throw new Error('invalid encryption configuration')
+  }
+  return crypto.subtle.importKey(
+    'raw',
+    fromHex(secretHex),
+    { name: 'AES-GCM' },
+    false,
+    usage,
+  )
+}
+
+export async function encryptSecret(secretHex: string, plaintext: string) {
+  const nonce = crypto.getRandomValues(new Uint8Array(12))
+  const ciphertext = await crypto.subtle.encrypt(
+    { name: 'AES-GCM', iv: nonce },
+    await aesKey(secretHex, ['encrypt']),
+    encoder.encode(plaintext),
+  )
+  return { ciphertext: toHex(new Uint8Array(ciphertext)), nonce: toHex(nonce) }
+}
+
+export async function decryptSecret(
+  secretHex: string,
+  encrypted: { ciphertext: string; nonce: string },
+) {
+  const plaintext = await crypto.subtle.decrypt(
+    { name: 'AES-GCM', iv: fromHex(encrypted.nonce) },
+    await aesKey(secretHex, ['decrypt']),
+    fromHex(encrypted.ciphertext),
+  )
+  return new TextDecoder('utf-8', { fatal: true }).decode(plaintext)
+}
+
 export function randomHex(byteLength: number) {
   return toHex(crypto.getRandomValues(new Uint8Array(byteLength)))
 }

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  adminFilmaUrl,
   adminLoginUrl,
   adminVideoCodesUrl,
   adminVideoEditUrl,
@@ -10,6 +11,8 @@ import {
 
 describe('admin routes', () => {
   it('derives each screen and valid list offset from the URL', () => {
+    expect(adminFilmaUrl()).toBe('/admin/filma')
+    expect(parseAdminRoute('/admin/filma', '')).toEqual({ kind: 'filma' })
     expect(parseAdminRoute('/admin/videos', '')).toEqual({
       kind: 'videos',
       offset: 0,
@@ -54,6 +57,7 @@ describe('admin routes', () => {
       ['/admin/videos/video%2Fone/edit', ''],
       ['/admin/videos//codes', ''],
       ['/admin/unknown', ''],
+      ['/admin/filma', '?secret=not-allowed'],
     ]
     for (const [pathname, search] of invalidRoutes) {
       expect(parseAdminRoute(pathname, search)).toEqual({ kind: 'not-found' })
@@ -76,6 +80,7 @@ describe('admin routes', () => {
     expect(safeAdminReturnTo('/admin/videos/video-1/edit?offset=100')).toBe(
       '/admin/videos/video-1/edit?offset=100',
     )
+    expect(safeAdminReturnTo('/admin/filma')).toBe('/admin/filma')
     for (const value of [
       null,
       '',

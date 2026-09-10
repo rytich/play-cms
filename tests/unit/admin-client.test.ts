@@ -5,7 +5,9 @@ import {
   adminRequest,
   loginPasswordValidationError,
   localDateTime,
+  loadFilmaConnection,
   newPasswordValidationError,
+  saveFilmaConnection,
   toIsoDateTime,
 } from '../../src/admin/client'
 
@@ -129,5 +131,32 @@ describe('admin client', () => {
     expect(new Headers(actual?.headers).get('Content-Type')).toBe(
       'application/json',
     )
+  })
+
+  it('uses the typed Filma connection boundary without returning a saved key', async () => {
+    const requests: Array<{ url: string; init: RequestInit }> = []
+    vi.stubGlobal('fetch', (url: string, init: RequestInit) => {
+      requests.push({ url, init })
+      return Promise.resolve(
+        Response.json({
+          configured: true,
+          verifiedAt: '2026-09-09T00:00:00.000Z',
+        }),
+      )
+    })
+    await expect(loadFilmaConnection()).resolves.toEqual({
+      configured: true,
+      verifiedAt: '2026-09-09T00:00:00.000Z',
+    })
+    await expect(saveFilmaConnection('synthetic-key')).resolves.toEqual({
+      configured: true,
+      verifiedAt: '2026-09-09T00:00:00.000Z',
+    })
+    expect(
+      requests.map(({ url, init }) => [url, init.method, init.body]),
+    ).toEqual([
+      ['/api/admin/filma', 'GET', undefined],
+      ['/api/admin/filma', 'PUT', '{"apiKey":"synthetic-key"}'],
+    ])
   })
 })

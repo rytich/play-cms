@@ -16,7 +16,10 @@ export const errorBody = {
 export function applySecurityHeaders(response: Response) {
   const headers = new Headers(response.headers)
   headers.set('Cache-Control', 'no-store')
-  headers.set('Content-Security-Policy', "frame-ancestors 'none'")
+  headers.set(
+    'Content-Security-Policy',
+    "frame-src https://filma.biz; frame-ancestors 'none'",
+  )
   headers.set('Referrer-Policy', 'no-referrer')
   headers.set('X-Content-Type-Options', 'nosniff')
   headers.set('X-Frame-Options', 'DENY')
@@ -88,6 +91,23 @@ export function sessionToken(request: Request) {
 
 export async function sessionHash(request: Request) {
   const token = sessionToken(request)
+  return token ? sha256Hex(token) : null
+}
+
+export function anonymousToken(request: Request) {
+  const cookie = request.headers.get('Cookie') ?? ''
+  for (const item of cookie.split(';')) {
+    const [name, ...value] = item.trim().split('=')
+    if (name === 'play_anonymous') {
+      const token = value.join('=')
+      return /^[0-9a-f]{64}$/.test(token) ? token : null
+    }
+  }
+  return null
+}
+
+export async function anonymousHash(request: Request) {
+  const token = anonymousToken(request)
   return token ? sha256Hex(token) : null
 }
 

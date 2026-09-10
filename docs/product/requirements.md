@@ -1,7 +1,7 @@
 # play-cms 現行要件
 
 - 状態: P0招待テスト準備
-- 更新日: 2026-09-09
+- 更新日: 2026-09-10
 - Tracking: [Issue #34](https://github.com/rytich/play-cms/issues/34)
 - 詳細設計: [P0最小縦切りプロトタイプ](../superpowers/specs/2026-09-07-p0-prototype-design.md)
 - 実行計画: [P0招待テスト完了計画](../superpowers/plans/2026-09-09-p0-invite-test-completion.md)
@@ -32,6 +32,7 @@ Filma上の動画を、管理者が公開期間と使い切り閲覧キーで限
 - 未ログインでキーを使用した場合は30分間の匿名視聴を開始し、「期限内に登録またはログインしないと二度と閲覧できない」と明示する。
 - 匿名視聴中に登録またはログインすると、その動画の視聴権をアカウントへ一度だけ引き継ぐ。
 - ログイン済みでキーを使用した場合は、同じ処理で視聴権をアカウントへ付与する。
+- 再生画面は、サーバーが検証した短時間・動画限定のFilma player URLをiframeへ埋め込む。独自のHTML5 video playerや長期間有効なAPIキーをブラウザーへ渡さない。
 - ログイン後の`/library`には、本人が取得した視聴権のうち、現在公開中かつ期限内の動画だけを表示する。
 - 動画が非公開、公開前、期限終了後の場合は、URLからのアクセス、一覧件数、タイトル、説明、サムネイル、Filma ID、再生情報を表示しない。
 
@@ -49,7 +50,7 @@ Filma上の動画を、管理者が公開期間と使い切り閲覧キーで限
 - 将来の直接アップロードは、Filmaが発行する短時間・単一ファイル・アップロード専用の署名URLまたはupload sessionを使う。現在の`fullaccess` APIキーをブラウザーへ渡す方式は採用しない。
 - Filmaの実APIは固定した許可先だけへ、サーバーからタイムアウト・応答量・redirectを制限して接続する。
 
-実再生は[Filma再生契約 Issue #16](https://github.com/rytich/play-cms/issues/16)で、動画単位の期限、CMS指定期限を超えないこと、許可ドメイン外で利用できないことを確認できた場合だけ有効にする。確認できない状態で閲覧キーを消費しない。
+一般公開の実再生は[Filma再生契約 Issue #16](https://github.com/rytich/play-cms/issues/16)で、動画単位の期限、CMS指定期限を超えないこと、許可ドメイン外で利用できないことを確認できた場合だけ有効にする。P0招待試験に限り、[ADR 0003](../decisions/0003-allow-limited-p0-playback-without-domain-binding.md)の専用・非機密動画一件、3〜5名、動画単位・5分以下、既定無効、一般公開前に再停止する条件をすべて満たす場合だけ、ドメイン拘束なしの再生を許可する。最低限の動画限定・期限契約を確認できない状態では閲覧キーを消費しない。
 
 ## 実行環境
 
@@ -61,7 +62,7 @@ Filma上の動画を、管理者が公開期間と使い切り閲覧キーで限
 
 ## P0招待テストの完了条件
 
-1. [Issue #35](https://github.com/rytich/play-cms/issues/35)で、キー消費、匿名視聴、登録／ログイン時の権利引き継ぎ、再視聴を一本につなぐ。
+1. [Issue #35](https://github.com/rytich/play-cms/issues/35)・[PR #42](https://github.com/rytich/play-cms/pull/42)で、キー消費、匿名視聴、登録／ログイン時の権利引き継ぎ、再視聴を一本につなぐ。
 2. [Issue #30](https://github.com/rytich/play-cms/issues/30)で、実BFCache復帰と200%拡大を確認する。
 3. [Issue #36](https://github.com/rytich/play-cms/issues/36)で、専用Cloudflare D1へmigrationを適用し、招待テスト用Workerへデプロイする。
 4. [Issue #37](https://github.com/rytich/play-cms/issues/37)で3〜5名が操作し、80%以上が補助なしで「キー入力から再生」まで完了する。
@@ -71,4 +72,4 @@ Filma上の動画を、管理者が公開期間と使い切り閲覧キーで限
 
 ## 現在地
 
-管理者初期登録・認証、動画と閲覧キーの管理、100件ページング・絞り込み・一括状態変更、視聴者登録・認証、合成視聴権の期限内ライブラリまでが`develop`へ統合済み。閲覧キー消費、匿名視聴、視聴権引き継ぎ、Filma APIキー設定と実再生、実D1 migration、Cloudflareデプロイ、招待受入は未完了である。
+管理者初期登録・認証、動画と閲覧キーの管理、100件ページング・絞り込み・一括状態変更、視聴者登録・認証、合成視聴権の期限内ライブラリまでが`develop`へ統合済み。[Issue #35](https://github.com/rytich/play-cms/issues/35)では閲覧キー消費、匿名視聴、視聴権引き継ぎ、Filma player埋め込みを実装中である。実Filma契約確認、実D1 migration、Cloudflareデプロイ、招待受入は未完了である。

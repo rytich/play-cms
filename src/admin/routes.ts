@@ -21,6 +21,7 @@ export type AdminRoute =
       returnTo: string
       codeFilters: CodeFilters
     }
+  | { kind: 'filma' }
   | { kind: 'not-found' }
 
 const videoKeys = ['q', 'status', 'from', 'to', 'offset'] as const
@@ -49,6 +50,10 @@ export function adminVideosUrl(value: number | VideoFilters = 0): string {
     '/admin/videos',
     videoFiltersParams(normalizedVideoFilters(value)),
   )
+}
+
+export function adminFilmaUrl(): string {
+  return '/admin/filma'
 }
 
 export function adminVideoEditUrl(
@@ -112,6 +117,9 @@ function videoRoute(pathname: string, search: string): AdminRoute | null {
 }
 
 export function parseAdminRoute(pathname: string, search: string): AdminRoute {
+  if (pathname === '/admin/filma') {
+    return search === '' ? { kind: 'filma' } : { kind: 'not-found' }
+  }
   if (pathname === '/admin/setup') return { kind: 'setup' }
   if (pathname === '/admin/login') {
     const returnTo = new URLSearchParams(search).get('returnTo')
@@ -158,5 +166,6 @@ export function safeAdminReturnTo(value: string | null): string {
       ? adminVideoCodesUrl(route.videoId, filters, route.codeFilters)
       : adminVideosUrl()
   }
+  if (route.kind === 'filma') return adminFilmaUrl()
   return adminVideosUrl()
 }

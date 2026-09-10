@@ -177,6 +177,72 @@ describe('admin management API', () => {
     expect(await used.json()).toMatchObject({ codes: [], hasMore: false })
   })
 
+  it('shows used keys and refuses their bulk or revoke mutations without deleting rights', async () => {
+    await seedVideos(2)
+    await seedCodes(uuid(1), 2)
+    await env.DATABASE.batch([
+      env.DATABASE.prepare(
+        `INSERT INTO accounts (id, role, email, password_hash, created_at)
+         VALUES ('viewer-used', 'viewer', 'used@example.test', 'hash', 1)`,
+      ),
+      env.DATABASE.prepare(
+        `INSERT INTO redemptions
+         (code_id, video_id, anonymous_session_id, account_id, redeemed_at)
+         VALUES ('10000000-0000-4000-8000-000000000001', ?, NULL,
+                 'viewer-used', 2)`,
+      ).bind(uuid(1)),
+      env.DATABASE.prepare(
+        `INSERT INTO entitlements
+         (account_id, video_id, source_code_id, granted_at)
+         VALUES ('viewer-used', ?,
+                 '10000000-0000-4000-8000-000000000001', 2)`,
+      ).bind(uuid(1)),
+    ])
+
+    const used = await api(
+      `/api/admin/videos/${uuid(1)}/codes?lifecycle=used`,
+      { headers },
+    )
+    expect(await used.json()).toMatchObject({
+      codes: [
+        expect.objectContaining({
+          id: '10000000-0000-4000-8000-000000000001',
+          status: 'used',
+        }),
+      ],
+    })
+
+    const bulk = await api(`/api/admin/videos/${uuid(1)}/codes/bulk-status`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        ids: ['10000000-0000-4000-8000-000000000001'],
+        enabled: false,
+      }),
+    })
+    expect(bulk.status).toBe(409)
+    const revoke = await api(
+      `/api/admin/videos/${uuid(1)}/codes/10000000-0000-4000-8000-000000000001/revoke`,
+      { method: 'POST', headers, body: '{}' },
+    )
+    expect(revoke.status).toBe(409)
+    const wrongVideo = await api(
+      `/api/admin/videos/${uuid(2)}/codes/10000000-0000-4000-8000-000000000001/revoke`,
+      { method: 'POST', headers, body: '{}' },
+    )
+    expect(wrongVideo.status).toBe(404)
+    expect(
+      await env.DATABASE.prepare(
+        'SELECT COUNT(*) AS count FROM redemptions',
+      ).first(),
+    ).toEqual({ count: 1 })
+    expect(
+      await env.DATABASE.prepare(
+        'SELECT COUNT(*) AS count FROM entitlements',
+      ).first(),
+    ).toEqual({ count: 1 })
+  })
+
   it('atomically changes 100 videos and reports idempotent repeats', async () => {
     await seedVideos(100)
     const ids = Array.from({ length: 100 }, (_, index) => uuid(index + 1))
