@@ -7,6 +7,90 @@ description: Use when reviewing a play-cms feature branch or pull request before
 
 Review an exact Git range against its approved design, implementation plan, Issue, and repository rules, then perform gated GitHub actions as `knryt`. The reviewer must be a separate agent with no implementation conversation history.
 
+<!-- reviewer-contract:start -->
+
+```json
+{
+  "schema": "play-cms-reviewer/v1",
+  "frontmatter": {
+    "required": ["name", "description"],
+    "name": "play-cms-reviewer",
+    "descriptionPrefix": "Use when "
+  },
+  "requiredInputs": {
+    "always": [
+      "baseSha",
+      "headSha",
+      "issueNumber",
+      "pullRequestNumber",
+      "taskNumber",
+      "taskSummary",
+      "approvedDesignPath",
+      "approvedPlanPath",
+      "reviewRound"
+    ],
+    "webhookTriggered": ["webhookEvent", "webhookAction", "deliveryId"],
+    "reviewRequested": ["requestedReviewerLogin"]
+  },
+  "reviewRounds": ["initial", "re-review"],
+  "reviewRoundRules": {
+    "initial": {
+      "scope": "full-diff",
+      "assignStableFindingIds": true
+    },
+    "re-review": {
+      "source": "verified-formal-knryt-review",
+      "carryFindingLedger": true,
+      "reverifyAgainstCurrentDiff": true
+    }
+  },
+  "findingStatuses": ["new", "resolved", "still-open"],
+  "findingLedger": {
+    "sourceFields": ["reviewId", "author", "commitId", "submittedAt"],
+    "legacyIdPrefix": "legacy-F-",
+    "newBlockingReasons": [
+      "fix-introduced",
+      "new-evidence",
+      "initial-miss-admissible-critical-important"
+    ],
+    "initialMissRequires": ["lateDiscoveryReason", "reviewerProcessFollowUp"]
+  },
+  "webhook": {
+    "event": "pull_request",
+    "allowedActions": [
+      "opened",
+      "synchronize",
+      "reopened",
+      "ready_for_review",
+      "review_requested"
+    ],
+    "reviewRequestedReviewer": "knryt",
+    "deniedEvents": ["pull_request_review", "issue_comment"]
+  },
+  "delivery": {
+    "states": ["received", "running", "succeeded", "failed"],
+    "claimable": ["new", "failed", "lease-expired"],
+    "suppressed": ["running-with-valid-lease", "succeeded"]
+  },
+  "verdictSectionOrder": [
+    "Review scope",
+    "Strengths",
+    "Finding ledger",
+    "Critical",
+    "Important",
+    "Minor",
+    "Plan/spec defects",
+    "Operational stop",
+    "Assessment"
+  ],
+  "operationalStop": {
+    "whenOnlyBlocker": "no-pr-write"
+  }
+}
+```
+
+<!-- reviewer-contract:end -->
+
 ## Required input
 
 - Base and head commit SHA

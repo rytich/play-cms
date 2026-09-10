@@ -45,8 +45,8 @@
 - Review round: initial / re-review
 - Finding ledger source: review ID / author / commit ID / submittedAt（initialはなし）
 - Finding ledger:
-- Late-discovery reason / reviewer-process follow-up: なし
-- Operational stop: なし
+- Late-discovery reason / reviewer-process follow-up: [記入必須。該当しない場合は「なし」と記入]
+- Operational stop: [記入必須。該当しない場合は「なし」と記入]
 - Assessment: 未実施
 - GitHub action: 未実施
 
