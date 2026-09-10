@@ -14,6 +14,7 @@ import {
   parseViewerRegistration,
 } from '../../src/core/viewer'
 import {
+  FilmaPlaybackFrame,
   ViewerAuthForm,
   ViewerLibrary,
   performViewerLogout,
@@ -22,6 +23,22 @@ import {
 afterEach(() => vi.unstubAllGlobals())
 
 describe('viewer client', () => {
+  it('embeds the Filma player without rendering a native video element', () => {
+    const player = renderToStaticMarkup(
+      createElement(FilmaPlaybackFrame, {
+        url: 'https://filma.biz/player/synthetic',
+        title: 'Synthetic viewing title',
+      }),
+    )
+
+    expect(player).toContain('<iframe')
+    expect(player).toContain('src="https://filma.biz/player/synthetic"')
+    expect(player).toContain('title="Filmaプレーヤー: Synthetic viewing title"')
+    expect(player).toContain('allow="fullscreen"')
+    expect(player).toContain('allowFullScreen=""')
+    expect(player).not.toContain('<video')
+  })
+
   it('renders distinct viewer auth forms without persistent credential fields', () => {
     const register = renderToStaticMarkup(
       createElement(ViewerAuthForm, {

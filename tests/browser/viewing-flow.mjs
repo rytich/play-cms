@@ -24,7 +24,8 @@ const server = createServer(async (request, response) => {
     response.writeHead(200, {
       'Content-Type':
         contentTypes[extname(relativePath)] ?? 'application/octet-stream',
-      'Content-Security-Policy': "frame-ancestors 'none'",
+      'Content-Security-Policy':
+        "frame-src https://filma.biz; frame-ancestors 'none'",
       'X-Frame-Options': 'DENY',
     })
     response.end(body)
@@ -187,6 +188,20 @@ try {
   await page.getByRole('button', { name: '視聴を開始' }).click()
   await page.getByRole('heading', { name: playback.video.title }).waitFor()
   await page.getByText('この視聴は30分間だけ有効です。').waitFor()
+  const player = page.getByTitle(`Filmaプレーヤー: ${playback.video.title}`)
+  await player.waitFor()
+  if ((await player.getAttribute('src')) !== playback.playback.url) {
+    throw new Error('Filma player URL did not match the playback grant')
+  }
+  if ((await player.getAttribute('allow')) !== 'fullscreen') {
+    throw new Error('Filma player did not allow fullscreen')
+  }
+  if ((await player.getAttribute('allowfullscreen')) === null) {
+    throw new Error('Filma player omitted the fullscreen attribute')
+  }
+  if (await page.locator('video').count()) {
+    throw new Error('native video element was rendered')
+  }
   if (page.url().includes('0123') || page.url().includes('CDEF')) {
     throw new Error('viewing code leaked into the URL')
   }

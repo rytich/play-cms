@@ -184,6 +184,25 @@ type ViewingResult = {
   playback: { url: string; expiresAt: string }
 }
 
+export function FilmaPlaybackFrame({
+  url,
+  title,
+}: {
+  url: string
+  title: string
+}) {
+  return (
+    <iframe
+      className="viewing-player"
+      src={url}
+      title={`Filmaプレーヤー: ${title}`}
+      allow="fullscreen"
+      allowFullScreen
+      referrerPolicy="no-referrer"
+    />
+  )
+}
+
 function ViewingPage({
   publicId,
   authenticated,
@@ -256,9 +275,10 @@ function ViewingPage({
       <section className="viewing-page" aria-labelledby="viewing-heading">
         <h1 id="viewing-heading">{result.video.title}</h1>
         {result.video.description && <p>{result.video.description}</p>}
-        <video controls src={result.playback.url}>
-          このブラウザは動画再生に対応していません。
-        </video>
+        <FilmaPlaybackFrame
+          url={result.playback.url}
+          title={result.video.title}
+        />
         {result.anonymous && (
           <div className="notice" role="note">
             <strong>この視聴は30分間だけ有効です。</strong>

@@ -12,6 +12,8 @@
 
 `/register?returnTo=/v/:publicId`と`/login?returnTo=/v/:publicId`は、検証済みの同一サイト視聴URLだけを戻り先にできる。コード、再生URL、視聴者IDはURLやbrowser storageへ保存しない。
 
+再生成功時は、サーバー側で固定originと期限を検証した短時間・動画限定のFilma player URLだけをiframeの`src`に設定する。play-cms独自のHTML5 video要素は使わず、Filma APIキーをブラウザーへ返さない。CSPの`frame-src`は`https://filma.biz`だけを許可し、`frame-ancestors 'none'`によるplay-cms画面自体の埋め込み拒否は維持する。
+
 ## 原子性と非公開境界
 
 引換は、公開中の期間内動画、有効・未使用コード、P0フラグと専用FilmaファイルIDの完全一致を確認する。Filma grantを検証できた後、D1 batch内で同じ条件を再確認して一件だけ消費する。Filma失敗、フラグ無効、allowlist不一致、不正または5分を超えるgrantでは、redemptionも視聴権も作らずコードを未使用のまま残す。
