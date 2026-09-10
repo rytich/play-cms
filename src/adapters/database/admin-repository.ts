@@ -347,11 +347,15 @@ export function findAccessCodeSecret(
 ) {
   return db
     .prepare(
-      `SELECT code_ciphertext, code_nonce
+      `SELECT code_hash, code_ciphertext, code_nonce
        FROM access_codes WHERE id = ? AND video_id = ?`,
     )
     .bind(codeId, videoId)
-    .first<{ code_ciphertext: string | null; code_nonce: string | null }>()
+    .first<{
+      code_hash: string
+      code_ciphertext: string | null
+      code_nonce: string | null
+    }>()
 }
 
 export async function reissueAccessCode(

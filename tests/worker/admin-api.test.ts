@@ -2,7 +2,10 @@ import { env, exports } from 'cloudflare:workers'
 import { beforeEach, describe, expect, it } from 'vitest'
 
 import { app } from '../../src/server/app'
-import { hashPassword } from '../../src/adapters/secrets/web-crypto'
+import {
+  encryptSecret,
+  hashPassword,
+} from '../../src/adapters/secrets/web-crypto'
 
 const bootstrapToken = 'a'.repeat(64)
 const jsonHeaders = {
@@ -30,7 +33,14 @@ async function resetDatabase() {
     env.DATABASE.prepare('DELETE FROM sessions'),
     env.DATABASE.prepare('DELETE FROM accounts'),
     env.DATABASE.prepare(
-      'UPDATE app_settings SET bootstrap_consumed_at = NULL WHERE id = 1',
+      `UPDATE app_settings
+       SET bootstrap_consumed_at = NULL,
+           filma_api_key_ciphertext = NULL,
+           filma_api_key_nonce = NULL,
+           filma_verified_at = NULL,
+           filma_organization_id = NULL,
+           filma_api_type = NULL
+       WHERE id = 1`,
     ),
   ])
 }
@@ -672,6 +682,8 @@ describe('admin API', () => {
       })
     ).text()
     expect(listText).not.toContain(issuedBody.code)
+    expect(listText).not.toContain('code_hash')
+    expect(listText).not.toContain('codeHash')
     expect(listText).not.toContain('ciphertext')
     expect(listText).not.toContain('nonce')
 
@@ -743,6 +755,126 @@ describe('admin API', () => {
     )
     expect(corrupted.status).toBe(503)
     expect(await corrupted.json()).toEqual({ error: 'unavailable' })
+  })
+
+  it('rejects decrypted key material whose Crockford format is invalid', async () => {
+    const cookie = await authenticatedCookie()
+    const { video } = await (
+      await createVideo(cookie)
+    ).json<{ video: { id: string } }>()
+    const issued = await api(`/api/admin/videos/${video.id}/codes`, {
+      method: 'POST',
+      headers: { ...jsonHeaders, Cookie: cookie },
+      body: '{}',
+    })
+    const { id } = await issued.json<{ id: string }>()
+    const invalidPlaintext = 'not-a-viewing-code'
+    const encrypted = await encryptSecret('12'.repeat(32), invalidPlaintext)
+    await env.DATABASE.prepare(
+      `UPDATE access_codes
+       SET code_ciphertext = ?, code_nonce = ?
+       WHERE id = ?`,
+    )
+      .bind(encrypted.ciphertext, encrypted.nonce, id)
+      .run()
+
+    const response = await api(
+      `/api/admin/videos/${video.id}/codes/${id}/reveal`,
+      {
+        method: 'POST',
+        headers: { ...jsonHeaders, Cookie: cookie },
+        body: '{}',
+      },
+    )
+    expect(response.status).toBe(503)
+    expect(await response.json()).toEqual({ error: 'unavailable' })
+  })
+
+  it('rejects encrypted key material copied from another access-code row', async () => {
+    const cookie = await authenticatedCookie()
+    const { video } = await (
+      await createVideo(cookie)
+    ).json<{ video: { id: string } }>()
+    const first = await api(`/api/admin/videos/${video.id}/codes`, {
+      method: 'POST',
+      headers: { ...jsonHeaders, Cookie: cookie },
+      body: '{}',
+    })
+    const firstBody = await first.json<{ id: string; code: string }>()
+    const second = await api(`/api/admin/videos/${video.id}/codes`, {
+      method: 'POST',
+      headers: { ...jsonHeaders, Cookie: cookie },
+      body: '{}',
+    })
+    const secondBody = await second.json<{ id: string; code: string }>()
+    await env.DATABASE.prepare(
+      `UPDATE access_codes
+       SET code_ciphertext = (
+             SELECT code_ciphertext FROM access_codes WHERE id = ?
+           ),
+           code_nonce = (
+             SELECT code_nonce FROM access_codes WHERE id = ?
+           )
+       WHERE id = ?`,
+    )
+      .bind(secondBody.id, secondBody.id, firstBody.id)
+      .run()
+
+    const response = await api(
+      `/api/admin/videos/${video.id}/codes/${firstBody.id}/reveal`,
+      {
+        method: 'POST',
+        headers: { ...jsonHeaders, Cookie: cookie },
+        body: '{}',
+      },
+    )
+    expect(response.status).toBe(503)
+    expect(await response.text()).not.toContain(secondBody.code)
+  })
+
+  it('rejects encrypted Filma API key material copied into an access-code row', async () => {
+    const cookie = await authenticatedCookie()
+    const { video } = await (
+      await createVideo(cookie)
+    ).json<{ video: { id: string } }>()
+    const issued = await api(`/api/admin/videos/${video.id}/codes`, {
+      method: 'POST',
+      headers: { ...jsonHeaders, Cookie: cookie },
+      body: '{}',
+    })
+    const { id } = await issued.json<{ id: string }>()
+    const filmaPlaintext = 'synthetic-filma-api-key'
+    const encrypted = await encryptSecret('12'.repeat(32), filmaPlaintext)
+    await env.DATABASE.prepare(
+      `UPDATE app_settings
+       SET filma_api_key_ciphertext = ?, filma_api_key_nonce = ?
+       WHERE id = 1`,
+    )
+      .bind(encrypted.ciphertext, encrypted.nonce)
+      .run()
+    await env.DATABASE.prepare(
+      `UPDATE access_codes
+       SET code_ciphertext = (
+             SELECT filma_api_key_ciphertext FROM app_settings WHERE id = 1
+           ),
+           code_nonce = (
+             SELECT filma_api_key_nonce FROM app_settings WHERE id = 1
+           )
+       WHERE id = ?`,
+    )
+      .bind(id)
+      .run()
+
+    const response = await api(
+      `/api/admin/videos/${video.id}/codes/${id}/reveal`,
+      {
+        method: 'POST',
+        headers: { ...jsonHeaders, Cookie: cookie },
+        body: '{}',
+      },
+    )
+    expect(response.status).toBe(503)
+    expect(await response.text()).not.toContain(filmaPlaintext)
   })
 
   it('atomically reissues unused, disabled, revoked, and used keys without erasing history', async () => {

@@ -930,6 +930,13 @@ app.post('/api/admin/videos/:id/codes/:codeId/reveal', async (c) => {
       ciphertext: secret.code_ciphertext,
       nonce: secret.code_nonce,
     })
+    const normalized = parseViewingCode(code)
+    if (
+      normalized === null ||
+      !constantTimeSecretEqual(secret.code_hash, await sha256Hex(normalized))
+    ) {
+      return c.json(errorBody.unavailable, 503)
+    }
     return c.json({ code })
   } catch {
     return c.json(errorBody.unavailable, 503)

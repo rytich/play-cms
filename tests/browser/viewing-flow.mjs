@@ -56,7 +56,9 @@ const playback = {
 }
 let codeUsed = false
 let filmaConfigured = false
-let adminCodeId = '00000000-0000-4000-8000-000000000009'
+const oldAdminCodeId = '00000000-0000-4000-8000-000000000009'
+const newAdminCodeId = '00000000-0000-4000-8000-000000000010'
+let adminCodeReissued = false
 
 function json(route, status, body, headers = {}) {
   return route.fulfill({
@@ -146,18 +148,19 @@ async function installSyntheticApi(context, state) {
       })
     }
     if (
-      pathname === `/api/admin/videos/video-a/codes/${adminCodeId}/reveal` &&
+      pathname === `/api/admin/videos/video-a/codes/${oldAdminCodeId}/reveal` &&
       request.method() === 'POST'
     ) {
       return json(route, 200, { code: 'ABCD-EFGH-JKLM-NPQR' })
     }
     if (
-      pathname === `/api/admin/videos/video-a/codes/${adminCodeId}/reissue` &&
+      pathname ===
+        `/api/admin/videos/video-a/codes/${oldAdminCodeId}/reissue` &&
       request.method() === 'POST'
     ) {
-      adminCodeId = '00000000-0000-4000-8000-000000000010'
+      adminCodeReissued = true
       return json(route, 201, {
-        id: adminCodeId,
+        id: newAdminCodeId,
         code: 'QRST-VWXY-2345-6789',
         createdAt: '2026-09-10T00:00:00.000Z',
       })
@@ -169,14 +172,27 @@ async function installSyntheticApi(context, state) {
       return json(route, 200, {
         codes: [
           {
-            id: adminCodeId,
+            id: oldAdminCodeId,
             createdAt: '2026-09-09T00:00:00.000Z',
-            revokedAt: null,
+            revokedAt: adminCodeReissued ? '2026-09-10T00:00:00.000Z' : null,
             status: 'used',
-            enabled: adminCodeId.endsWith('10'),
+            enabled: false,
             revealable: true,
-            reissued: false,
+            reissued: adminCodeReissued,
           },
+          ...(adminCodeReissued
+            ? [
+                {
+                  id: newAdminCodeId,
+                  createdAt: '2026-09-10T00:00:00.000Z',
+                  revokedAt: null,
+                  status: 'unused',
+                  enabled: true,
+                  revealable: true,
+                  reissued: false,
+                },
+              ]
+            : []),
         ],
         hasMore: false,
       })
@@ -194,6 +210,17 @@ const browser = await chromium.launch({
 
 try {
   const firstContext = await browser.newContext()
+  await firstContext.addInitScript(() => {
+    Object.defineProperty(globalThis.navigator, 'clipboard', {
+      configurable: true,
+      value: {
+        writeText: async (value) => {
+          globalThis.__playCmsClipboardWrites ??= []
+          globalThis.__playCmsClipboardWrites.push(String(value))
+        },
+      },
+    })
+  })
   const firstState = { viewer: false, anonymous: false }
   await installSyntheticApi(firstContext, firstState)
   const page = await firstContext.newPage()
@@ -295,6 +322,14 @@ try {
   if ((await publicLink.getAttribute('href')) !== '/v/public-a') {
     throw new Error('same-origin public video link was not rendered')
   }
+  await page.getByRole('button', { name: 'URLをコピー' }).click()
+  await page.getByText('URLをコピーしました。').waitFor()
+  const copiedPublicUrl = await page.evaluate(() =>
+    globalThis.__playCmsClipboardWrites?.at(-1),
+  )
+  if (copiedPublicUrl !== `${base}/v/public-a`) {
+    throw new Error('absolute same-origin public video URL was not copied')
+  }
   if ((await page.getByLabel('公開状態').inputValue()) !== 'published') {
     throw new Error('saved publication status was not loaded')
   }
@@ -312,13 +347,24 @@ try {
   await page.getByRole('button', { name: '再発行' }).click()
   await page.getByText('QRST-VWXY-2345-6789', { exact: true }).waitFor()
 
-  await page.getByText('使用済み', { exact: true }).waitFor()
-  const usedCheckbox = page.getByLabel(`閲覧用キーID ${adminCodeId} を選択`)
+  const oldCodeRow = page.locator('li').filter({ hasText: oldAdminCodeId })
+  const newCodeRow = page.locator('li').filter({ hasText: newAdminCodeId })
+  await oldCodeRow.getByText('使用済み', { exact: true }).waitFor()
+  await oldCodeRow.getByRole('button', { name: '再発行済み' }).waitFor()
+  await newCodeRow.getByText('未使用', { exact: true }).waitFor()
+  const usedCheckbox = oldCodeRow.getByLabel(
+    `閲覧用キーID ${oldAdminCodeId} を選択`,
+  )
   if (!(await usedCheckbox.isDisabled()))
     throw new Error('used code was selectable')
-  if (await page.getByRole('button', { name: '取り消す' }).count()) {
+  if (await oldCodeRow.getByRole('button', { name: '取り消す' }).count()) {
     throw new Error('used code offered revoke')
   }
+  const newCheckbox = newCodeRow.getByLabel(
+    `閲覧用キーID ${newAdminCodeId} を選択`,
+  )
+  if (await newCheckbox.isDisabled())
+    throw new Error('reissued unused code was not selectable')
 
   const secondContext = await browser.newContext()
   const secondState = { viewer: false, anonymous: false }
