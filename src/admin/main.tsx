@@ -30,8 +30,8 @@ import {
   localDateTime,
   loadFilmaConnection,
   newPasswordValidationError,
+  optionalIsoDateTime,
   saveFilmaConnection,
-  toIsoDateTime,
 } from './client'
 import {
   adminLoginUrl,
@@ -63,6 +63,8 @@ type CodeMetadata = {
   revokedAt: string | null
   status: 'unused' | 'used' | 'revoked'
   enabled: boolean
+  revealable: boolean
+  reissued: boolean
 }
 
 type ProtectedPageProps = {
@@ -74,6 +76,7 @@ const emptyVideoForm: VideoFormValues = {
   filmaFileId: '',
   title: '',
   description: '',
+  status: 'draft',
   startsAt: '',
   endsAt: '',
 }
@@ -86,9 +89,14 @@ function formFromVideo(video: Video): VideoFormValues {
     filmaFileId: video.filmaFileId,
     title: video.title,
     description: video.description,
+    status: video.status,
     startsAt: localDateTime(video.startsAt),
     endsAt: localDateTime(video.endsAt),
   }
+}
+
+function displayAvailability(value: string | null, fallback: string) {
+  return value === null ? fallback : new Date(value).toLocaleString('ja-JP')
 }
 
 function visibleError(caught: unknown) {
@@ -486,7 +494,7 @@ function VideosPage({
 
   async function bulkStatus(published: boolean) {
     if (selected.size === 0 || busy) return
-    const label = published ? '公開設定' : '非公開'
+    const label = published ? '公開' : '非公開（下書き）'
     if (
       !window.confirm(
         `${selected.size}件の動画を${label}にします。タイトルや期間は変更しません。`,
@@ -550,7 +558,7 @@ function VideosPage({
                 ? '100件ずつ読み込みます。'
                 : `${videoListRangeLabel(offset, videos.length)}。`}{' '}
               日時は{displayTimeZone}
-              で表示します。公開設定済みでも実配信は停止中です。
+              で表示します。公開でも閲覧用キーまたは視聴権が必要です。
             </p>
           </div>
           <a
@@ -637,16 +645,16 @@ function VideosPage({
                         <strong>{video.title}</strong>
                         <span className="status-badge">
                           {video.status === 'published'
-                            ? '公開設定済み'
-                            : '非公開'}
+                            ? '公開'
+                            : '非公開（下書き）'}
                         </span>
                       </div>
                       <dl>
                         <div>
                           <dt>公開期間</dt>
                           <dd>
-                            {new Date(video.startsAt).toLocaleString('ja-JP')}〜
-                            {new Date(video.endsAt).toLocaleString('ja-JP')}
+                            {displayAvailability(video.startsAt, '制限なし')}〜
+                            {displayAvailability(video.endsAt, '無期限')}
                           </dd>
                         </div>
                       </dl>
@@ -749,6 +757,7 @@ function VideoEditorPage({
   const [error, setError] = useState('')
   const [saved, setSaved] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [publicLinkCopyStatus, setPublicLinkCopyStatus] = useState('')
   const [dateRangeError, setDateRangeError] = useState<string | null>(null)
   const heading = usePageHeading(isNew ? '動画を登録' : '動画を編集')
   const errorSummary = useRef<HTMLParagraphElement>(null)
@@ -825,8 +834,8 @@ function VideoEditorPage({
     try {
       const payload = {
         ...form,
-        startsAt: toIsoDateTime(form.startsAt),
-        endsAt: toIsoDateTime(form.endsAt),
+        startsAt: optionalIsoDateTime(form.startsAt),
+        endsAt: optionalIsoDateTime(form.endsAt),
       }
       const path =
         route.kind === 'edit-video'
@@ -883,7 +892,7 @@ function VideoEditorPage({
             {isNew ? '動画を登録' : '動画を編集'}
           </h1>
           <p className="subtle">
-            公開せず、Filmaの存在確認を行わない下書きです。
+            公開状態と期間を保存します。Filmaの存在確認は行いません。
           </p>
         </div>
         <a href={route.returnTo} onClick={followLink}>
@@ -891,7 +900,38 @@ function VideoEditorPage({
         </a>
       </div>
       {!isNew && video && (
-        <VideoTabs videoId={video.id} filters={returnFilters} current="edit" />
+        <>
+          <VideoTabs
+            videoId={video.id}
+            filters={returnFilters}
+            current="edit"
+          />
+          <div className="public-link-row">
+            <a href={`/v/${encodeURIComponent(video.publicId)}`}>公開ページ</a>
+            <button
+              type="button"
+              className="secondary"
+              onClick={() => {
+                const url = new URL(
+                  `/v/${encodeURIComponent(video.publicId)}`,
+                  window.location.origin,
+                ).toString()
+                void navigator.clipboard.writeText(url).then(
+                  () => setPublicLinkCopyStatus('URLをコピーしました。'),
+                  () =>
+                    setPublicLinkCopyStatus('URLをコピーできませんでした。'),
+                )
+              }}
+            >
+              URLをコピー
+            </button>
+            {publicLinkCopyStatus && (
+              <span className="subtle" role="status">
+                {publicLinkCopyStatus}
+              </span>
+            )}
+          </div>
+        </>
       )}
       <div className="card editor-card">
         <form onSubmit={(event) => void saveVideo(event)}>
@@ -929,6 +969,21 @@ function VideoEditorPage({
                 setForm({ ...form, description: event.target.value })
               }
             />
+          </label>
+          <label>
+            公開状態
+            <select
+              value={form.status}
+              onChange={(event) =>
+                setForm({
+                  ...form,
+                  status: event.target.value as 'draft' | 'published',
+                })
+              }
+            >
+              <option value="draft">非公開（下書き）</option>
+              <option value="published">公開</option>
+            </select>
           </label>
           <VideoDateFields
             startsAt={form.startsAt}
@@ -1140,6 +1195,59 @@ function VideoCodesPage({
     }
   }
 
+  async function revealCode(codeId: string) {
+    setIssuedCode(null)
+    setCopyStatus('')
+    setBusy(true)
+    setError('')
+    try {
+      const result = await adminRequest<{ code: string }>(
+        `/api/admin/videos/${encodeURIComponent(
+          route.videoId,
+        )}/codes/${encodeURIComponent(codeId)}/reveal`,
+        'POST',
+        {},
+      )
+      setIssuedCode(result.code)
+    } catch (caught) {
+      handleError(caught)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function reissueCode(codeId: string) {
+    if (
+      !window.confirm(
+        `閲覧用キー（ID: ${codeId}）を再発行しますか？旧キーは再利用できなくなります。`,
+      )
+    )
+      return
+    setIssuedCode(null)
+    setCopyStatus('')
+    setBusy(true)
+    setError('')
+    try {
+      const result = await adminRequest<{
+        id: string
+        code: string
+        createdAt: string
+      }>(
+        `/api/admin/videos/${encodeURIComponent(
+          route.videoId,
+        )}/codes/${encodeURIComponent(codeId)}/reissue`,
+        'POST',
+        {},
+      )
+      setIssuedCode(result.code)
+      await load(activeCodeFilters)
+    } catch (caught) {
+      handleError(caught)
+    } finally {
+      setBusy(false)
+    }
+  }
+
   async function bulkCodeStatus(enabled: boolean) {
     if (selected.size === 0 || busy) return
     const action = enabled ? '有効' : '無効'
@@ -1252,7 +1360,7 @@ function VideoCodesPage({
               <div>
                 <h2>発行履歴</h2>
                 <p className="subtle">
-                  生のキーは発行直後に一度だけ表示します。
+                  生のキーは必要な1件だけ表示し、一覧には含めません。
                 </p>
               </div>
               <button
@@ -1265,7 +1373,7 @@ function VideoCodesPage({
             </div>
             {issuedCode && (
               <div className="issued-key" role="status">
-                <strong>このキーは再表示できません</strong>
+                <strong>表示中のキー</strong>
                 <p className="key-value">{issuedCode}</p>
                 <div className="issued-actions">
                   <button type="button" onClick={() => void copyIssuedCode()}>
@@ -1326,14 +1434,17 @@ function VideoCodesPage({
               kind="codes"
               selectedCount={selected.size}
               busy={busy}
-              enableDisabled={Date.parse(video.endsAt) <= Date.now()}
+              enableDisabled={
+                video.endsAt !== null && Date.parse(video.endsAt) <= Date.now()
+              }
               onTarget={(target) => void bulkCodeStatus(target)}
             />
-            {Date.parse(video.endsAt) <= Date.now() && (
-              <p className="subtle">
-                期間終了済みのためキーを再有効化できません。
-              </p>
-            )}
+            {video.endsAt !== null &&
+              Date.parse(video.endsAt) <= Date.now() && (
+                <p className="subtle">
+                  期間終了済みのためキーを再有効化できません。
+                </p>
+              )}
             {resultMessage && (
               <p className="success" role="status">
                 {resultMessage}
@@ -1373,16 +1484,36 @@ function VideoCodesPage({
                       </span>
                       <small>ID: {code.id}</small>
                     </div>
-                    {code.status === 'unused' && (
+                    <div className="row-actions">
+                      {code.revealable && (
+                        <button
+                          type="button"
+                          className="secondary"
+                          disabled={busy}
+                          onClick={() => void revealCode(code.id)}
+                        >
+                          キーを表示
+                        </button>
+                      )}
                       <button
                         type="button"
-                        className="danger"
-                        disabled={busy}
-                        onClick={() => void revokeCode(code.id)}
+                        className="secondary"
+                        disabled={busy || code.reissued}
+                        onClick={() => void reissueCode(code.id)}
                       >
-                        取り消す
+                        {code.reissued ? '再発行済み' : '再発行'}
                       </button>
-                    )}
+                      {code.status === 'unused' && (
+                        <button
+                          type="button"
+                          className="danger"
+                          disabled={busy}
+                          onClick={() => void revokeCode(code.id)}
+                        >
+                          取り消す
+                        </button>
+                      )}
+                    </div>
                   </li>
                 ))}
               </ul>

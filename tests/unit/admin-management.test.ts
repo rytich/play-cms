@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
+import { parseVideoInput } from '../../src/core/admin'
+
 import {
   codeMatchesIssuedRange,
   isCodeEligibleForBulk,
@@ -16,6 +18,64 @@ const ids = Array.from(
 )
 
 describe('admin management input', () => {
+  it('accepts independent optional availability bounds and an explicit status', () => {
+    const base = {
+      filmaFileId: '123',
+      title: '公開期間テスト',
+      description: '',
+      status: 'published',
+    }
+
+    expect(parseVideoInput({ ...base, startsAt: null, endsAt: null })).toEqual({
+      ...base,
+      startsAt: null,
+      endsAt: null,
+    })
+    expect(
+      parseVideoInput({
+        ...base,
+        status: 'draft',
+        startsAt: '2026-09-10T00:00:00Z',
+        endsAt: null,
+      }),
+    ).toEqual({
+      ...base,
+      status: 'draft',
+      startsAt: '2026-09-10T00:00:00.000Z',
+      endsAt: null,
+    })
+    expect(
+      parseVideoInput({
+        ...base,
+        startsAt: null,
+        endsAt: '2026-09-11T00:00:00Z',
+      }),
+    ).not.toBeNull()
+  })
+
+  it('requires an ordered range only when both bounds are present', () => {
+    const base = {
+      filmaFileId: '123',
+      title: '公開期間テスト',
+      description: '',
+      status: 'published',
+    }
+    expect(
+      parseVideoInput({
+        ...base,
+        startsAt: '2026-09-11T00:00:00Z',
+        endsAt: '2026-09-10T00:00:00Z',
+      }),
+    ).toBeNull()
+    expect(
+      parseVideoInput({
+        ...base,
+        status: 'archived',
+        startsAt: null,
+        endsAt: null,
+      }),
+    ).toBeNull()
+  })
   it('accepts only one to 100 distinct UUIDs and exact bulk fields', () => {
     expect(parseBulkVideoInput({ ids: [ids[0]], status: 'published' })).toEqual(
       {
@@ -131,6 +191,21 @@ describe('admin management input', () => {
     )
     expect(codeMatchesIssuedRange(100, 100, null)).toBe(true)
     expect(codeMatchesIssuedRange(100, null, 100)).toBe(false)
+
+    expect(
+      videoMatchesRange(
+        { startsAt: null, endsAt: null },
+        '2026-09-10T00:00:00.000Z',
+        '2026-09-11T00:00:00.000Z',
+      ),
+    ).toBe(true)
+    expect(
+      videoMatchesRange(
+        { startsAt: null, endsAt: '2026-09-10T00:00:00.000Z' },
+        '2026-09-10T00:00:00.000Z',
+        null,
+      ),
+    ).toBe(false)
   })
 
   it('allows only unused, unrevoked keys and rejects expired re-enablement', () => {
@@ -142,6 +217,9 @@ describe('admin management input', () => {
     expect(isCodeEligibleForBulk(current, false, 200)).toBe(true)
     expect(isCodeEligibleForBulk(current, true, 199)).toBe(true)
     expect(isCodeEligibleForBulk(current, true, 200)).toBe(false)
+    expect(isCodeEligibleForBulk({ ...current, endsAt: null }, true, 200)).toBe(
+      true,
+    )
     expect(
       isCodeEligibleForBulk({ ...current, lifecycle: 'used' }, false, 100),
     ).toBe(false)

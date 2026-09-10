@@ -162,7 +162,10 @@ export function ViewerLibrary({
                   </a>
                 </strong>
                 <span>
-                  視聴期限: {new Date(video.endsAt).toLocaleString('ja-JP')}
+                  視聴期限:{' '}
+                  {video.endsAt === null
+                    ? '無期限'
+                    : new Date(video.endsAt).toLocaleString('ja-JP')}
                 </span>
               </li>
             ))}
@@ -179,7 +182,7 @@ type ViewingResult = {
     publicId: string
     title: string
     description: string
-    endsAt: string
+    endsAt: string | null
   }
   playback: { url: string; expiresAt: string }
 }

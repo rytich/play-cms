@@ -5,16 +5,17 @@ export type Video = Readonly<{
   title: string
   description: string
   status: 'draft' | 'published'
-  startsAt: string
-  endsAt: string
+  startsAt: string | null
+  endsAt: string | null
 }>
 
 export type VideoInput = Readonly<{
   filmaFileId: string
   title: string
   description: string
-  startsAt: string
-  endsAt: string
+  status: 'draft' | 'published'
+  startsAt: string | null
+  endsAt: string | null
 }>
 
 export function isPlainRecord(
@@ -74,6 +75,7 @@ export function parseVideoInput(value: unknown): VideoInput | null {
     'filmaFileId',
     'title',
     'description',
+    'status',
     'startsAt',
     'endsAt',
   ] as const
@@ -93,14 +95,22 @@ export function parseVideoInput(value: unknown): VideoInput | null {
   ) {
     return null
   }
-  const startsAt = canonicalIso(value.startsAt)
-  const endsAt = canonicalIso(value.endsAt)
-  if (!startsAt || !endsAt || Date.parse(startsAt) >= Date.parse(endsAt))
+  if (value.status !== 'draft' && value.status !== 'published') return null
+  const startsAt = value.startsAt === null ? null : canonicalIso(value.startsAt)
+  const endsAt = value.endsAt === null ? null : canonicalIso(value.endsAt)
+  if (
+    (value.startsAt !== null && startsAt === null) ||
+    (value.endsAt !== null && endsAt === null) ||
+    (startsAt !== null &&
+      endsAt !== null &&
+      Date.parse(startsAt) >= Date.parse(endsAt))
+  )
     return null
   return {
     filmaFileId: value.filmaFileId,
     title,
     description: value.description,
+    status: value.status,
     startsAt,
     endsAt,
   }

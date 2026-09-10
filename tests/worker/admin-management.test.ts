@@ -127,6 +127,42 @@ describe('admin management API', () => {
     }
   })
 
+  it('includes unbounded videos in overlapping searches and permits key re-enablement without an end', async () => {
+    await seedVideos(1)
+    await seedCodes(uuid(1), 1)
+    const codeId = '10000000-0000-4000-8000-000000000001'
+    await env.DATABASE.batch([
+      env.DATABASE.prepare(
+        'UPDATE videos SET starts_at = NULL, ends_at = NULL WHERE id = ?',
+      ).bind(uuid(1)),
+      env.DATABASE.prepare(
+        'UPDATE access_codes SET is_enabled = 0 WHERE id = ?',
+      ).bind(codeId),
+    ])
+
+    const list = await api(
+      '/api/admin/videos?from=2099-01-01T00%3A00%3A00Z&to=2100-01-01T00%3A00%3A00Z',
+      { headers },
+    )
+    expect(await list.json()).toMatchObject({
+      videos: [{ id: uuid(1), startsAt: null, endsAt: null }],
+    })
+
+    const enabled = await api(
+      `/api/admin/videos/${uuid(1)}/codes/bulk-status`,
+      {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ ids: [codeId], enabled: true }),
+      },
+    )
+    expect(enabled.status).toBe(200)
+    expect(await enabled.json()).toEqual({
+      changedCount: 1,
+      unchangedCount: 0,
+    })
+  })
+
   it('returns the final one of 1001 codes and filters settings and lifecycle', async () => {
     await seedVideos(1)
     await seedCodes(uuid(1))
@@ -268,8 +304,9 @@ describe('admin management API', () => {
       headers,
       body: JSON.stringify({
         filmaFileId: '1',
-        title: 'Edited without status',
+        title: 'Edited with explicit status',
         description: '',
+        status: 'published',
         startsAt: '2026-09-09T00:00:00.000Z',
         endsAt: '2026-09-11T00:00:00.000Z',
       }),

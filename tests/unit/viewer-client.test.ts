@@ -232,6 +232,27 @@ describe('viewer client', () => {
         endsAt: '2026-09-10T00:00:00.000Z',
       },
     ])
+
+    expect(
+      availableLibraryItems(
+        [
+          {
+            ...base,
+            status: 'published',
+            startsAt: null,
+            endsAt: null,
+          },
+        ],
+        Date.parse('2100-09-09T12:00:00.000Z'),
+      ),
+    ).toEqual([
+      {
+        publicId: 'public-a',
+        title: 'Available',
+        description: 'Description',
+        endsAt: null,
+      },
+    ])
   })
 
   it('uses the strong registration policy without locking out legacy logins', () => {

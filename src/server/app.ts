@@ -9,12 +9,14 @@ import {
   createSession,
   deleteSession,
   findAdminByEmail,
+  findAccessCodeSecret,
   findVideo,
   insertAccessCode,
   insertVideo,
   listAccessCodes,
   listVideos,
   revokeAccessCode,
+  reissueAccessCode,
   updateVideo,
 } from '../adapters/database/admin-repository'
 import {
@@ -826,14 +828,27 @@ app.post('/api/admin/videos/:id/codes', async (c) => {
   if (!(await findVideo(c.env.DATABASE, videoId))) {
     return c.json(errorBody.notFound, 404)
   }
+  if (
+    !isStrongHexSecret(c.env.PLAY_ENCRYPTION_KEY) ||
+    c.env.PLAY_ENCRYPTION_KEY.length !== 64
+  ) {
+    return c.json(errorBody.unavailable, 503)
+  }
   const code = generateAccessCode()
   const id = crypto.randomUUID()
   const now = Math.floor(Date.now() / 1_000)
+  let encrypted: { ciphertext: string; nonce: string }
+  try {
+    encrypted = await encryptSecret(c.env.PLAY_ENCRYPTION_KEY, code.rendered)
+  } catch {
+    return c.json(errorBody.unavailable, 503)
+  }
   if (
     await insertAccessCode(c.env.DATABASE, {
       id,
       videoId,
       codeHash: await sha256Hex(code.normalized),
+      ...encrypted,
       now,
     })
   ) {
@@ -875,9 +890,103 @@ app.get('/api/admin/videos/:id/codes', async (c) => {
             ? ('unused' as const)
             : ('revoked' as const),
       enabled: row.is_enabled === 1,
+      revealable: row.revealable === 1,
+      reissued: row.reissued === 1,
     })),
     hasMore: result.hasMore,
   })
+})
+
+app.post('/api/admin/videos/:id/codes/:codeId/reveal', async (c) => {
+  const auth = await requireAdmin(c)
+  if ('response' in auth) return auth.response
+  const limited = await limitAdminWrite(c, auth.accountId)
+  if (limited) return limited
+  const body = await writeBody(c)
+  if (
+    'response' in body ||
+    !isPlainRecord(body.value) ||
+    !hasOnlyFields(body.value, [])
+  ) {
+    return 'response' in body ? body.response : c.json(errorBody.invalid, 400)
+  }
+  if (
+    !isStrongHexSecret(c.env.PLAY_ENCRYPTION_KEY) ||
+    c.env.PLAY_ENCRYPTION_KEY.length !== 64
+  ) {
+    return c.json(errorBody.unavailable, 503)
+  }
+  const secret = await findAccessCodeSecret(
+    c.env.DATABASE,
+    c.req.param('id'),
+    c.req.param('codeId'),
+  )
+  if (!secret) return c.json(errorBody.notFound, 404)
+  if (!secret.code_ciphertext || !secret.code_nonce) {
+    return c.json(errorBody.conflict, 409)
+  }
+  try {
+    const code = await decryptSecret(c.env.PLAY_ENCRYPTION_KEY, {
+      ciphertext: secret.code_ciphertext,
+      nonce: secret.code_nonce,
+    })
+    return c.json({ code })
+  } catch {
+    return c.json(errorBody.unavailable, 503)
+  }
+})
+
+app.post('/api/admin/videos/:id/codes/:codeId/reissue', async (c) => {
+  const auth = await requireAdmin(c)
+  if ('response' in auth) return auth.response
+  const limited = await limitAdminWrite(c, auth.accountId)
+  if (limited) return limited
+  const body = await writeBody(c)
+  if (
+    'response' in body ||
+    !isPlainRecord(body.value) ||
+    !hasOnlyFields(body.value, [])
+  ) {
+    return 'response' in body ? body.response : c.json(errorBody.invalid, 400)
+  }
+  if (
+    !isStrongHexSecret(c.env.PLAY_ENCRYPTION_KEY) ||
+    c.env.PLAY_ENCRYPTION_KEY.length !== 64
+  ) {
+    return c.json(errorBody.unavailable, 503)
+  }
+  const videoId = c.req.param('id')
+  const oldCodeId = c.req.param('codeId')
+  if (!(await findAccessCodeSecret(c.env.DATABASE, videoId, oldCodeId))) {
+    return c.json(errorBody.notFound, 404)
+  }
+  const code = generateAccessCode()
+  const id = crypto.randomUUID()
+  const now = Math.floor(Date.now() / 1_000)
+  let encrypted: { ciphertext: string; nonce: string }
+  try {
+    encrypted = await encryptSecret(c.env.PLAY_ENCRYPTION_KEY, code.rendered)
+  } catch {
+    return c.json(errorBody.unavailable, 503)
+  }
+  const result = await reissueAccessCode(c.env.DATABASE, {
+    videoId,
+    oldCodeId,
+    newCodeId: id,
+    codeHash: await sha256Hex(code.normalized),
+    ...encrypted,
+    now,
+  })
+  if (result.kind === 'not-found') return c.json(errorBody.notFound, 404)
+  if (result.kind === 'conflict') return c.json(errorBody.conflict, 409)
+  return c.json(
+    {
+      id,
+      code: code.rendered,
+      createdAt: new Date(now * 1_000).toISOString(),
+    },
+    201,
+  )
 })
 
 app.post('/api/admin/videos/:id/codes/bulk-status', async (c) => {

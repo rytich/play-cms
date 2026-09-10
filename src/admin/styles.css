@@ -253,10 +253,29 @@ dt {
   max-width: 760px;
 }
 
+.public-link-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  max-width: 760px;
+  margin-bottom: 16px;
+}
+
+.public-link-row .subtle {
+  margin: 0;
+}
+
 .date-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 12px;
+}
+
+.field-hint {
+  color: var(--play-color-muted);
+  font-size: 0.8rem;
+  font-weight: 400;
 }
 
 .form-actions,

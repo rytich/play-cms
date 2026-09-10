@@ -551,6 +551,40 @@ describe('one-time viewing flow', () => {
     ).toEqual({ account_id: 'viewer-direct' })
   })
 
+  it('treats missing start and end as unbounded across redeem, library, and playback', async () => {
+    await seedAvailableVideo()
+    await env.DATABASE.prepare(
+      `UPDATE videos SET starts_at = NULL, ends_at = NULL WHERE id = 'video-a'`,
+    ).run()
+    const viewerCookie = await seedSession('viewer', 'viewer-unbounded')
+    const external = grantFetch()
+    vi.stubGlobal('fetch', external)
+
+    const redeemed = await redeem(viewerCookie)
+    expect(redeemed.status).toBe(200)
+    const library = await request('/api/viewer/library', {
+      headers: { Cookie: viewerCookie },
+    })
+    expect(await library.json()).toEqual({
+      videos: [
+        {
+          publicId: 'public-a',
+          title: 'Visible title',
+          description: 'Visible description',
+          endsAt: null,
+        },
+      ],
+    })
+    expect(
+      (
+        await request('/api/viewer/videos/public-a/playback', {
+          headers: { Cookie: viewerCookie },
+        })
+      ).status,
+    ).toBe(200)
+    expect(external).toHaveBeenCalledTimes(2)
+  })
+
   it('transfers an anonymous redemption during login without duplicating entitlement', async () => {
     await seedAvailableVideo()
     const password = 'viewer password long enough'

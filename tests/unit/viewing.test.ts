@@ -43,6 +43,18 @@ describe('viewing core', () => {
       ),
     ).toBe(false)
     expect(isViewerAvailable({ ...video, startsAt: 'invalid' }, 0)).toBe(false)
+    expect(
+      isViewerAvailable(
+        { ...video, startsAt: null, endsAt: null },
+        Date.parse('2100-01-01T00:00:00.000Z'),
+      ),
+    ).toBe(true)
+    expect(
+      isViewerAvailable({ ...video, startsAt: null }, Date.parse(video.endsAt)),
+    ).toBe(false)
+    expect(
+      isViewerAvailable({ ...video, endsAt: null }, Date.parse(video.startsAt)),
+    ).toBe(true)
   })
 
   it('caps grants at five minutes and the video end', () => {
@@ -54,6 +66,7 @@ describe('viewing core', () => {
       '2026-09-09T00:03:00.000Z',
     )
     expect(playbackNotAfter(now, 'invalid')).toBeNull()
+    expect(playbackNotAfter(now, null)).toBe('2026-09-09T00:05:00.000Z')
   })
 
   it('round-trips encrypted settings without retaining plaintext fields', async () => {

@@ -16,15 +16,15 @@ export type ViewerLibraryRow = Readonly<{
   title: string
   description: string
   status: 'draft' | 'published'
-  startsAt: string
-  endsAt: string
+  startsAt: string | null
+  endsAt: string | null
 }>
 
 export type ViewerLibraryItem = Readonly<{
   publicId: string
   title: string
   description: string
-  endsAt: string
+  endsAt: string | null
 }>
 
 function parseCredentials(
@@ -53,14 +53,12 @@ export function availableLibraryItems(
 ): ViewerLibraryItem[] {
   return rows
     .filter((row) => {
-      const startsAt = Date.parse(row.startsAt)
-      const endsAt = Date.parse(row.endsAt)
+      const startsAt = row.startsAt === null ? null : Date.parse(row.startsAt)
+      const endsAt = row.endsAt === null ? null : Date.parse(row.endsAt)
       return (
         row.status === 'published' &&
-        Number.isFinite(startsAt) &&
-        Number.isFinite(endsAt) &&
-        startsAt <= now &&
-        endsAt > now
+        (startsAt === null || (Number.isFinite(startsAt) && startsAt <= now)) &&
+        (endsAt === null || (Number.isFinite(endsAt) && endsAt > now))
       )
     })
     .map(({ publicId, title, description, endsAt }) => ({

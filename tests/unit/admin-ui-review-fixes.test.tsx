@@ -68,6 +68,9 @@ describe('admin UI review fixes', () => {
     )
     expect(html).not.toContain('aria-invalid')
     expect(html).not.toContain('aria-describedby')
+    expect(html).not.toContain('required=""')
+    expect(html).toContain('未設定なら制限なし')
+    expect(html).toContain('未設定なら無期限')
   })
 
   it('identifies the metadata record in revoke confirmation without a raw key', () => {

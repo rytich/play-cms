@@ -29,12 +29,16 @@ describe('admin UI state', () => {
       filmaFileId: '123',
       title: 'Saved title',
       description: '',
+      status: 'draft' as const,
       startsAt: '2026-09-08T10:00',
       endsAt: '2026-09-08T11:00',
     }
 
     expect(isVideoFormDirty(saved, saved)).toBe(false)
     expect(isVideoFormDirty({ ...saved, title: 'Changed title' }, saved)).toBe(
+      true,
+    )
+    expect(isVideoFormDirty({ ...saved, status: 'published' }, saved)).toBe(
       true,
     )
   })

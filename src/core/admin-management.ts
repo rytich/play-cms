@@ -181,13 +181,17 @@ export function parseCodeFilters(
 }
 
 export function videoMatchesRange(
-  video: { startsAt: string; endsAt: string },
+  video: { startsAt: string | null; endsAt: string | null },
   from: string | null,
   to: string | null,
 ) {
   return (
-    (from === null || Date.parse(video.endsAt) > Date.parse(from)) &&
-    (to === null || Date.parse(video.startsAt) < Date.parse(to))
+    (from === null ||
+      video.endsAt === null ||
+      Date.parse(video.endsAt) > Date.parse(from)) &&
+    (to === null ||
+      video.startsAt === null ||
+      Date.parse(video.startsAt) < Date.parse(to))
   )
 }
 
@@ -200,12 +204,16 @@ export function codeMatchesIssuedRange(
 }
 
 export function isCodeEligibleForBulk(
-  code: { lifecycle: CodeLifecycle; revoked: boolean; endsAt: number },
+  code: {
+    lifecycle: CodeLifecycle
+    revoked: boolean
+    endsAt: number | null
+  },
   targetEnabled: boolean,
   now: number,
 ) {
   if (code.lifecycle !== 'unused' || code.revoked) return false
-  return !targetEnabled || code.endsAt > now
+  return !targetEnabled || code.endsAt === null || code.endsAt > now
 }
 
 export function videoFiltersParams(filters: VideoFilters) {

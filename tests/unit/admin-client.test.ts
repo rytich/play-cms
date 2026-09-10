@@ -8,6 +8,7 @@ import {
   loadFilmaConnection,
   newPasswordValidationError,
   saveFilmaConnection,
+  optionalIsoDateTime,
   toIsoDateTime,
 } from '../../src/admin/client'
 
@@ -81,6 +82,11 @@ describe('admin client', () => {
   it('retains the local calendar value when editing a saved timestamp', () => {
     expect(localDateTime(new Date(2026, 8, 7, 12, 35).toISOString())).toBe(
       '2026-09-07T12:35',
+    )
+    expect(localDateTime(null)).toBe('')
+    expect(optionalIsoDateTime('')).toBeNull()
+    expect(optionalIsoDateTime('2026-09-07T12:35')).toBe(
+      new Date(2026, 8, 7, 12, 35).toISOString(),
     )
   })
 

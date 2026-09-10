@@ -15,8 +15,8 @@ type VideoRow = {
   title: string
   description: string
   status: VideoStatus
-  starts_at: string
-  ends_at: string
+  starts_at: string | null
+  ends_at: string | null
 }
 
 function mapVideo(row: VideoRow): Video {
@@ -149,11 +149,11 @@ export async function listVideos(db: D1Database, filters: VideoFilters) {
     bindings.push(filters.status)
   }
   if (filters.from) {
-    where.push('ends_at > ?')
+    where.push('(ends_at IS NULL OR ends_at > ?)')
     bindings.push(filters.from)
   }
   if (filters.to) {
-    where.push('starts_at < ?')
+    where.push('(starts_at IS NULL OR starts_at < ?)')
     bindings.push(filters.to)
   }
   const rows = await db
@@ -184,7 +184,7 @@ export async function insertVideo(
       `INSERT INTO videos
        (id, public_id, filma_file_id, title, description, status,
         starts_at, ends_at, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, 'draft', ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .bind(
       ids.id,
@@ -192,6 +192,7 @@ export async function insertVideo(
       input.filmaFileId,
       input.title,
       input.description,
+      input.status,
       input.startsAt,
       input.endsAt,
       now,
@@ -222,14 +223,15 @@ export async function updateVideo(
   const result = await db
     .prepare(
       `UPDATE videos
-       SET filma_file_id = ?, title = ?, description = ?, starts_at = ?,
-           ends_at = ?, updated_at = ?
+       SET filma_file_id = ?, title = ?, description = ?, status = ?,
+           starts_at = ?, ends_at = ?, updated_at = ?
        WHERE id = ?`,
     )
     .bind(
       input.filmaFileId,
       input.title,
       input.description,
+      input.status,
       input.startsAt,
       input.endsAt,
       now,
@@ -241,15 +243,32 @@ export async function updateVideo(
 
 export async function insertAccessCode(
   db: D1Database,
-  input: { id: string; videoId: string; codeHash: string; now: number },
+  input: {
+    id: string
+    videoId: string
+    codeHash: string
+    ciphertext: string
+    nonce: string
+    now: number
+  },
 ) {
   const result = await db
     .prepare(
-      `INSERT INTO access_codes (id, video_id, code_hash, created_at, revoked_at)
-       SELECT ?, ?, ?, ?, NULL
+      `INSERT INTO access_codes
+       (id, video_id, code_hash, code_ciphertext, code_nonce,
+        created_at, revoked_at)
+       SELECT ?, ?, ?, ?, ?, ?, NULL
        WHERE EXISTS (SELECT 1 FROM videos WHERE id = ?)`,
     )
-    .bind(input.id, input.videoId, input.codeHash, input.now, input.videoId)
+    .bind(
+      input.id,
+      input.videoId,
+      input.codeHash,
+      input.ciphertext,
+      input.nonce,
+      input.now,
+      input.videoId,
+    )
     .run()
   return result.meta.changes === 1
 }
@@ -295,6 +314,9 @@ export async function listAccessCodes(
     .prepare(
       `SELECT access_codes.id, access_codes.created_at,
               access_codes.revoked_at, access_codes.is_enabled,
+              (access_codes.code_ciphertext IS NOT NULL AND
+               access_codes.code_nonce IS NOT NULL) AS revealable,
+              access_codes.replaced_by_code_id IS NOT NULL AS reissued,
               redemptions.redeemed_at
        FROM access_codes
        LEFT JOIN redemptions ON redemptions.code_id = access_codes.id
@@ -309,11 +331,102 @@ export async function listAccessCodes(
       revoked_at: number | null
       is_enabled: number
       redeemed_at: number | null
+      revealable: number
+      reissued: number
     }>()
   return {
     codes: rows.results.slice(0, 100),
     hasMore: rows.results.length > 100,
   }
+}
+
+export function findAccessCodeSecret(
+  db: D1Database,
+  videoId: string,
+  codeId: string,
+) {
+  return db
+    .prepare(
+      `SELECT code_ciphertext, code_nonce
+       FROM access_codes WHERE id = ? AND video_id = ?`,
+    )
+    .bind(codeId, videoId)
+    .first<{ code_ciphertext: string | null; code_nonce: string | null }>()
+}
+
+export async function reissueAccessCode(
+  db: D1Database,
+  input: {
+    videoId: string
+    oldCodeId: string
+    newCodeId: string
+    codeHash: string
+    ciphertext: string
+    nonce: string
+    now: number
+  },
+) {
+  const results = await db.batch([
+    db
+      .prepare(
+        `SELECT COUNT(*) AS found_count,
+                COALESCE(SUM(replaced_by_code_id IS NOT NULL), 0) AS replaced_count
+         FROM access_codes WHERE id = ? AND video_id = ?`,
+      )
+      .bind(input.oldCodeId, input.videoId),
+    db
+      .prepare(
+        `INSERT INTO access_codes
+         (id, video_id, code_hash, code_ciphertext, code_nonce,
+          created_at, revoked_at, is_enabled, replaced_by_code_id)
+         SELECT ?, video_id, ?, ?, ?, ?, NULL, 1, NULL
+         FROM access_codes
+         WHERE id = ? AND video_id = ? AND replaced_by_code_id IS NULL`,
+      )
+      .bind(
+        input.newCodeId,
+        input.codeHash,
+        input.ciphertext,
+        input.nonce,
+        input.now,
+        input.oldCodeId,
+        input.videoId,
+      ),
+    db
+      .prepare(
+        `UPDATE access_codes
+         SET replaced_by_code_id = ?, is_enabled = 0,
+             revoked_at = CASE
+               WHEN EXISTS (
+                 SELECT 1 FROM redemptions
+                 WHERE redemptions.code_id = access_codes.id
+               ) THEN revoked_at
+               ELSE COALESCE(revoked_at, ?)
+             END
+         WHERE id = ? AND video_id = ? AND replaced_by_code_id IS NULL
+           AND EXISTS (SELECT 1 FROM access_codes WHERE id = ?)`,
+      )
+      .bind(
+        input.newCodeId,
+        input.now,
+        input.oldCodeId,
+        input.videoId,
+        input.newCodeId,
+      ),
+  ])
+  const row = results[0]!.results[0] as {
+    found_count: number
+    replaced_count: number
+  }
+  if (row.found_count !== 1) return { kind: 'not-found' as const }
+  if (
+    row.replaced_count !== 0 ||
+    results[1]!.meta.changes !== 1 ||
+    results[2]!.meta.changes !== 1
+  ) {
+    return { kind: 'conflict' as const }
+  }
+  return { kind: 'ok' as const }
 }
 
 export async function bulkUpdateVideos(
@@ -384,7 +497,8 @@ export async function bulkUpdateAccessCodes(
              )
            ), 0) AS conflict_count,
            COALESCE(SUM(is_enabled = ?), 0) AS unchanged_count,
-           (SELECT COUNT(*) FROM videos WHERE id = ? AND ends_at > ?) AS active_count
+           (SELECT COUNT(*) FROM videos
+            WHERE id = ? AND (ends_at IS NULL OR ends_at > ?)) AS active_count
          FROM access_codes
          WHERE video_id = ? AND id IN (SELECT value FROM json_each(?))`,
       )
@@ -399,7 +513,8 @@ export async function bulkUpdateAccessCodes(
              SELECT 1 FROM redemptions WHERE redemptions.code_id = access_codes.id
            )
            AND (? = 0 OR EXISTS (
-             SELECT 1 FROM videos WHERE id = ? AND ends_at > ?
+             SELECT 1 FROM videos
+             WHERE id = ? AND (ends_at IS NULL OR ends_at > ?)
            ))
            AND (SELECT COUNT(*) FROM access_codes
                 WHERE video_id = ? AND id IN (SELECT value FROM json_each(?))) = ?

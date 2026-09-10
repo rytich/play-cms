@@ -31,6 +31,7 @@ export type VideoFormValues = Readonly<{
   filmaFileId: string
   title: string
   description: string
+  status: 'draft' | 'published'
   startsAt: string
   endsAt: string
 }>
@@ -43,6 +44,7 @@ export function isVideoFormDirty(
     current.filmaFileId !== saved.filmaFileId ||
     current.title !== saved.title ||
     current.description !== saved.description ||
+    current.status !== saved.status ||
     current.startsAt !== saved.startsAt ||
     current.endsAt !== saved.endsAt
   )

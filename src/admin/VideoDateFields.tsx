@@ -30,21 +30,21 @@ export function VideoDateFields({
           開始日時
           <input
             type="datetime-local"
-            required
             value={startsAt}
             onChange={(event) => onStartsAtChange(event.target.value)}
             {...errorAttributes}
           />
+          <span className="field-hint">未設定なら制限なし</span>
         </label>
         <label>
           終了日時
           <input
             type="datetime-local"
-            required
             value={endsAt}
             onChange={(event) => onEndsAtChange(event.target.value)}
             {...errorAttributes}
           />
+          <span className="field-hint">未設定なら無期限</span>
         </label>
       </div>
       {dateRangeError && (

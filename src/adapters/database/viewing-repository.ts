@@ -15,8 +15,8 @@ type ViewingVideoRow = {
   title: string
   description: string
   status: 'draft' | 'published'
-  starts_at: string
-  ends_at: string
+  starts_at: string | null
+  ends_at: string | null
 }
 
 function mapVideo(row: ViewingVideoRow): ViewingVideo {
@@ -52,7 +52,8 @@ export async function findRedeemCandidate(
          AND access_codes.revoked_at IS NULL AND access_codes.is_enabled = 1
          AND redemptions.code_id IS NULL
          AND videos.status = 'published'
-         AND videos.starts_at <= ? AND videos.ends_at > ?`,
+         AND (videos.starts_at IS NULL OR videos.starts_at <= ?)
+         AND (videos.ends_at IS NULL OR videos.ends_at > ?)`,
     )
     .bind(publicId, codeHash, nowIso, nowIso)
     .first<ViewingVideoRow>()
@@ -86,7 +87,8 @@ export async function redeemForAnonymous(
              AND access_codes.revoked_at IS NULL AND access_codes.is_enabled = 1
              AND redemptions.code_id IS NULL
              AND videos.status = 'published'
-             AND videos.starts_at <= ? AND videos.ends_at > ?
+             AND (videos.starts_at IS NULL OR videos.starts_at <= ?)
+             AND (videos.ends_at IS NULL OR videos.ends_at > ?)
          )`,
       )
       .bind(
@@ -111,7 +113,8 @@ export async function redeemForAnonymous(
            AND access_codes.revoked_at IS NULL AND access_codes.is_enabled = 1
            AND redemptions.code_id IS NULL
            AND videos.status = 'published'
-           AND videos.starts_at <= ? AND videos.ends_at > ?
+           AND (videos.starts_at IS NULL OR videos.starts_at <= ?)
+           AND (videos.ends_at IS NULL OR videos.ends_at > ?)
            AND videos.filma_file_id = ?
            AND EXISTS (SELECT 1 FROM anonymous_play_sessions WHERE id = ?)`,
       )
@@ -161,7 +164,8 @@ export async function redeemForViewer(
            AND access_codes.revoked_at IS NULL AND access_codes.is_enabled = 1
            AND redemptions.code_id IS NULL
            AND videos.status = 'published'
-           AND videos.starts_at <= ? AND videos.ends_at > ?
+           AND (videos.starts_at IS NULL OR videos.starts_at <= ?)
+           AND (videos.ends_at IS NULL OR videos.ends_at > ?)
            AND videos.filma_file_id = ?`,
       )
       .bind(
@@ -259,7 +263,8 @@ export async function findAnonymousPlayback(
        WHERE anonymous_play_sessions.token_hash = ?
          AND anonymous_play_sessions.expires_at > ?
          AND videos.public_id = ? AND videos.status = 'published'
-         AND videos.starts_at <= ? AND videos.ends_at > ?`,
+         AND (videos.starts_at IS NULL OR videos.starts_at <= ?)
+         AND (videos.ends_at IS NULL OR videos.ends_at > ?)`,
     )
     .bind(tokenHash, now, publicId, nowIso, nowIso)
     .first<ViewingVideoRow>()
@@ -295,7 +300,8 @@ export async function findViewerPlayback(
        JOIN videos ON videos.id = entitlements.video_id
        WHERE entitlements.account_id = ? AND videos.public_id = ?
          AND videos.status = 'published'
-         AND videos.starts_at <= ? AND videos.ends_at > ?`,
+         AND (videos.starts_at IS NULL OR videos.starts_at <= ?)
+         AND (videos.ends_at IS NULL OR videos.ends_at > ?)`,
     )
     .bind(accountId, publicId, nowIso, nowIso)
     .first<ViewingVideoRow>()

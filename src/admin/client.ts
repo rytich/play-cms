@@ -70,7 +70,12 @@ export function toIsoDateTime(value: string): string {
   return date.toISOString()
 }
 
-export function localDateTime(value: string): string {
+export function optionalIsoDateTime(value: string): string | null {
+  return value === '' ? null : toIsoDateTime(value)
+}
+
+export function localDateTime(value: string | null): string {
+  if (value === null) return ''
   const date = new Date(value)
   if (!Number.isFinite(date.getTime()))
     throw new Error('日時を表示できません。')

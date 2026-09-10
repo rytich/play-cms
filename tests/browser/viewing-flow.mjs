@@ -56,6 +56,7 @@ const playback = {
 }
 let codeUsed = false
 let filmaConfigured = false
+let adminCodeId = '00000000-0000-4000-8000-000000000009'
 
 function json(route, status, body, headers = {}) {
   return route.fulfill({
@@ -137,22 +138,44 @@ async function installSyntheticApi(context, state) {
           title: 'Synthetic viewing title',
           description: '',
           status: 'published',
-          startsAt: '2020-01-01T00:00:00.000Z',
-          endsAt: '2100-01-01T00:00:00.000Z',
+          startsAt: null,
+          endsAt: null,
           createdAt: '2026-09-09T00:00:00.000Z',
           updatedAt: '2026-09-09T00:00:00.000Z',
         },
       })
     }
-    if (pathname === '/api/admin/videos/video-a/codes') {
+    if (
+      pathname === `/api/admin/videos/video-a/codes/${adminCodeId}/reveal` &&
+      request.method() === 'POST'
+    ) {
+      return json(route, 200, { code: 'ABCD-EFGH-JKLM-NPQR' })
+    }
+    if (
+      pathname === `/api/admin/videos/video-a/codes/${adminCodeId}/reissue` &&
+      request.method() === 'POST'
+    ) {
+      adminCodeId = '00000000-0000-4000-8000-000000000010'
+      return json(route, 201, {
+        id: adminCodeId,
+        code: 'QRST-VWXY-2345-6789',
+        createdAt: '2026-09-10T00:00:00.000Z',
+      })
+    }
+    if (
+      pathname === '/api/admin/videos/video-a/codes' &&
+      request.method() === 'GET'
+    ) {
       return json(route, 200, {
         codes: [
           {
-            id: '00000000-0000-4000-8000-000000000009',
+            id: adminCodeId,
             createdAt: '2026-09-09T00:00:00.000Z',
             revokedAt: null,
             status: 'used',
-            enabled: true,
+            enabled: adminCodeId.endsWith('10'),
+            revealable: true,
+            reissued: false,
           },
         ],
         hasMore: false,
@@ -266,10 +289,31 @@ try {
   await page.waitForURL(`${base}/admin/videos/video-a/codes`)
   await page.getByText('使用済み', { exact: true }).waitFor()
 
+  await page.goto(`${base}/admin/videos/video-a/edit`)
+  await page.getByRole('heading', { name: '動画を編集' }).waitFor()
+  const publicLink = page.getByRole('link', { name: '公開ページ' })
+  if ((await publicLink.getAttribute('href')) !== '/v/public-a') {
+    throw new Error('same-origin public video link was not rendered')
+  }
+  if ((await page.getByLabel('公開状態').inputValue()) !== 'published') {
+    throw new Error('saved publication status was not loaded')
+  }
+  if ((await page.getByLabel('開始日時').inputValue()) !== '') {
+    throw new Error('unbounded start was not rendered empty')
+  }
+  if ((await page.getByLabel('終了日時').inputValue()) !== '') {
+    throw new Error('unbounded end was not rendered empty')
+  }
+
+  await page.goto(`${base}/admin/videos/video-a/codes`)
+  await page.getByRole('button', { name: 'キーを表示' }).click()
+  await page.getByText('ABCD-EFGH-JKLM-NPQR', { exact: true }).waitFor()
+  page.once('dialog', (dialog) => dialog.accept())
+  await page.getByRole('button', { name: '再発行' }).click()
+  await page.getByText('QRST-VWXY-2345-6789', { exact: true }).waitFor()
+
   await page.getByText('使用済み', { exact: true }).waitFor()
-  const usedCheckbox = page.getByLabel(
-    '閲覧用キーID 00000000-0000-4000-8000-000000000009 を選択',
-  )
+  const usedCheckbox = page.getByLabel(`閲覧用キーID ${adminCodeId} を選択`)
   if (!(await usedCheckbox.isDisabled()))
     throw new Error('used code was selectable')
   if (await page.getByRole('button', { name: '取り消す' }).count()) {

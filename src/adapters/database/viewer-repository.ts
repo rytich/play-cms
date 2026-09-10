@@ -146,8 +146,8 @@ export async function listViewerLibraryRows(
        JOIN videos ON videos.id = entitlements.video_id
        WHERE entitlements.account_id = ?
          AND videos.status = 'published'
-         AND videos.starts_at <= ?
-         AND videos.ends_at > ?
+         AND (videos.starts_at IS NULL OR videos.starts_at <= ?)
+         AND (videos.ends_at IS NULL OR videos.ends_at > ?)
        ORDER BY entitlements.granted_at DESC, videos.id DESC`,
     )
     .bind(accountId, nowIso, nowIso)
@@ -156,8 +156,8 @@ export async function listViewerLibraryRows(
       title: string
       description: string
       status: 'draft' | 'published'
-      starts_at: string
-      ends_at: string
+      starts_at: string | null
+      ends_at: string | null
     }>()
   return rows.results.map((row) => ({
     publicId: row.public_id,

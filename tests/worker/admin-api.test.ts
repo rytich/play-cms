@@ -17,6 +17,7 @@ const validVideo = {
   filmaFileId: '12345678901234567890',
   title: 'A private draft',
   description: 'Not available to viewers.',
+  status: 'draft',
   startsAt: '2026-09-07T00:00:00.000Z',
   endsAt: '2026-09-08T00:00:00.000Z',
 }
@@ -402,7 +403,7 @@ describe('admin API', () => {
         },
       }),
     })
-    const extra = await createVideo(cookie, { status: 'draft' })
+    const extra = await createVideo(cookie, { unexpected: true })
 
     expect(crossOrigin.status).toBe(403)
     expect(nonJson.status).toBe(400)
@@ -426,23 +427,33 @@ describe('admin API', () => {
     ).toEqual({ count: 0 })
   })
 
-  it('creates, updates, and lists persistent draft videos', async () => {
+  it('creates, updates, and lists videos with independent dates and explicit publication state', async () => {
     const cookie = await authenticatedCookie()
-    const created = await createVideo(cookie)
+    const created = await createVideo(cookie, {
+      status: 'published',
+      startsAt: null,
+      endsAt: null,
+    })
     expect(created.status).toBe(201)
     const createdBody = await created.json<{
       video: { id: string; publicId: string; status: string; title: string }
     }>()
     expect(createdBody.video).toMatchObject({
-      status: 'draft',
+      status: 'published',
       title: validVideo.title,
+      startsAt: null,
+      endsAt: null,
     })
     expect(createdBody.video.id).not.toBe(createdBody.video.publicId)
 
     const updated = await api(`/api/admin/videos/${createdBody.video.id}`, {
       method: 'PUT',
       headers: { ...jsonHeaders, Cookie: cookie },
-      body: JSON.stringify({ ...validVideo, title: 'Updated title' }),
+      body: JSON.stringify({
+        ...validVideo,
+        title: 'Updated title',
+        startsAt: null,
+      }),
     })
     expect(updated.status).toBe(200)
     expect(await updated.json()).toMatchObject({
@@ -450,6 +461,8 @@ describe('admin API', () => {
         id: createdBody.video.id,
         title: 'Updated title',
         status: 'draft',
+        startsAt: null,
+        endsAt: validVideo.endsAt,
       },
     })
 
@@ -541,7 +554,7 @@ describe('admin API', () => {
     ).toBe(404)
   })
 
-  it('issues distinct one-time-visible Crockford codes while storing only hashes', async () => {
+  it('issues distinct Crockford codes while storing a hash and encrypted reveal material', async () => {
     const cookie = await authenticatedCookie()
     const created = await createVideo(cookie)
     const { video } = await created.json<{ video: { id: string } }>()
@@ -573,8 +586,13 @@ describe('admin API', () => {
     )
 
     const stored = await env.DATABASE.prepare(
-      'SELECT code_hash FROM access_codes ORDER BY created_at',
-    ).all<{ code_hash: string }>()
+      `SELECT code_hash, code_ciphertext, code_nonce
+       FROM access_codes ORDER BY created_at`,
+    ).all<{
+      code_hash: string
+      code_ciphertext: string
+      code_nonce: string
+    }>()
     expect(stored.results).toHaveLength(2)
     expect(stored.results.map((row) => row.code_hash)).not.toContain(
       firstBody.code,
@@ -582,6 +600,283 @@ describe('admin API', () => {
     expect(stored.results.map((row) => row.code_hash)).not.toContain(
       firstBody.code.replaceAll('-', ''),
     )
+    expect(
+      stored.results.every((row) => /^[0-9a-f]+$/.test(row.code_ciphertext)),
+    ).toBe(true)
+    expect(
+      stored.results.every((row) => /^[0-9a-f]{24}$/.test(row.code_nonce)),
+    ).toBe(true)
+    expect(JSON.stringify(stored.results)).not.toContain(firstBody.code)
+  })
+
+  it('fails issuance closed when the encryption key is missing or invalid', async () => {
+    const cookie = await authenticatedCookie()
+    const { video } = await (
+      await createVideo(cookie)
+    ).json<{ video: { id: string } }>()
+    const init: RequestInit = {
+      method: 'POST',
+      headers: { ...jsonHeaders, Cookie: cookie },
+      body: '{}',
+    }
+
+    for (const encryptionKey of [undefined, 'not-a-strong-key']) {
+      const response = await requestWithBindings(
+        `/api/admin/videos/${video.id}/codes`,
+        init,
+        { PLAY_ENCRYPTION_KEY: encryptionKey },
+      )
+      expect(response.status).toBe(503)
+      expect(await response.json()).toEqual({ error: 'unavailable' })
+    }
+    expect(
+      await env.DATABASE.prepare(
+        'SELECT COUNT(*) AS count FROM access_codes',
+      ).first(),
+    ).toEqual({ count: 0 })
+  })
+
+  it('reveals one administrator-selected encrypted key without exposing it in list responses', async () => {
+    const cookie = await authenticatedCookie()
+    const { video } = await (
+      await createVideo(cookie)
+    ).json<{ video: { id: string } }>()
+    const issued = await api(`/api/admin/videos/${video.id}/codes`, {
+      method: 'POST',
+      headers: { ...jsonHeaders, Cookie: cookie },
+      body: '{}',
+    })
+    const issuedBody = await issued.json<{ id: string; code: string }>()
+
+    const unauthorized = await api(
+      `/api/admin/videos/${video.id}/codes/${issuedBody.id}/reveal`,
+      { method: 'POST', headers: jsonHeaders, body: '{}' },
+    )
+    expect(unauthorized.status).toBe(401)
+
+    const revealed = await api(
+      `/api/admin/videos/${video.id}/codes/${issuedBody.id}/reveal`,
+      {
+        method: 'POST',
+        headers: { ...jsonHeaders, Cookie: cookie },
+        body: '{}',
+      },
+    )
+    expect(revealed.status).toBe(200)
+    expect(await revealed.json()).toEqual({ code: issuedBody.code })
+    expect(revealed.headers.get('Cache-Control')).toBe('no-store')
+
+    const listText = await (
+      await api(`/api/admin/videos/${video.id}/codes`, {
+        headers: { Cookie: cookie },
+      })
+    ).text()
+    expect(listText).not.toContain(issuedBody.code)
+    expect(listText).not.toContain('ciphertext')
+    expect(listText).not.toContain('nonce')
+
+    const wrongKey = await requestWithBindings(
+      `/api/admin/videos/${video.id}/codes/${issuedBody.id}/reveal`,
+      {
+        method: 'POST',
+        headers: { ...jsonHeaders, Cookie: cookie },
+        body: '{}',
+      },
+      { PLAY_ENCRYPTION_KEY: '34'.repeat(32) },
+    )
+    expect(wrongKey.status).toBe(503)
+    expect(await wrongKey.json()).toEqual({ error: 'unavailable' })
+  })
+
+  it('does not reveal legacy or corrupted key material', async () => {
+    const cookie = await authenticatedCookie()
+    const { video } = await (
+      await createVideo(cookie)
+    ).json<{ video: { id: string } }>()
+    await env.DATABASE.prepare(
+      `INSERT INTO access_codes
+       (id, video_id, code_hash, created_at, revoked_at, is_enabled)
+       VALUES ('legacy-code', ?, 'legacy-hash', 1, NULL, 1)`,
+    )
+      .bind(video.id)
+      .run()
+
+    const legacy = await api(
+      `/api/admin/videos/${video.id}/codes/legacy-code/reveal`,
+      {
+        method: 'POST',
+        headers: { ...jsonHeaders, Cookie: cookie },
+        body: '{}',
+      },
+    )
+    expect(legacy.status).toBe(409)
+    expect(await legacy.json()).toEqual({ error: 'conflict' })
+
+    const legacyReissued = await api(
+      `/api/admin/videos/${video.id}/codes/legacy-code/reissue`,
+      {
+        method: 'POST',
+        headers: { ...jsonHeaders, Cookie: cookie },
+        body: '{}',
+      },
+    )
+    expect(legacyReissued.status).toBe(201)
+
+    const issued = await api(`/api/admin/videos/${video.id}/codes`, {
+      method: 'POST',
+      headers: { ...jsonHeaders, Cookie: cookie },
+      body: '{}',
+    })
+    const { id } = await issued.json<{ id: string }>()
+    await env.DATABASE.prepare(
+      `UPDATE access_codes SET code_ciphertext = '00' WHERE id = ?`,
+    )
+      .bind(id)
+      .run()
+    const corrupted = await api(
+      `/api/admin/videos/${video.id}/codes/${id}/reveal`,
+      {
+        method: 'POST',
+        headers: { ...jsonHeaders, Cookie: cookie },
+        body: '{}',
+      },
+    )
+    expect(corrupted.status).toBe(503)
+    expect(await corrupted.json()).toEqual({ error: 'unavailable' })
+  })
+
+  it('atomically reissues unused, disabled, revoked, and used keys without erasing history', async () => {
+    const cookie = await authenticatedCookie()
+    const { video } = await (
+      await createVideo(cookie, { status: 'published' })
+    ).json<{ video: { id: string } }>()
+    const originalIds: string[] = []
+    for (let index = 0; index < 4; index += 1) {
+      const response = await api(`/api/admin/videos/${video.id}/codes`, {
+        method: 'POST',
+        headers: { ...jsonHeaders, Cookie: cookie },
+        body: '{}',
+      })
+      originalIds.push((await response.json<{ id: string }>()).id)
+    }
+    await env.DATABASE.batch([
+      env.DATABASE.prepare(
+        'UPDATE access_codes SET is_enabled = 0 WHERE id = ?',
+      ).bind(originalIds[1]),
+      env.DATABASE.prepare(
+        'UPDATE access_codes SET revoked_at = 2 WHERE id = ?',
+      ).bind(originalIds[2]),
+      env.DATABASE.prepare(
+        `INSERT INTO accounts (id, role, email, password_hash, created_at)
+         VALUES ('viewer-reissue', 'viewer', 'viewer-reissue@example.test', 'hash', 1)`,
+      ),
+      env.DATABASE.prepare(
+        `INSERT INTO redemptions
+         (code_id, video_id, anonymous_session_id, account_id, redeemed_at)
+         VALUES (?, ?, NULL, 'viewer-reissue', 3)`,
+      ).bind(originalIds[3], video.id),
+    ])
+
+    const replacements: string[] = []
+    for (const codeId of originalIds) {
+      const response = await api(
+        `/api/admin/videos/${video.id}/codes/${codeId}/reissue`,
+        {
+          method: 'POST',
+          headers: { ...jsonHeaders, Cookie: cookie },
+          body: '{}',
+        },
+      )
+      expect(response.status).toBe(201)
+      const body = await response.json<{ id: string; code: string }>()
+      expect(body.code).toMatch(
+        /^[0-9A-HJKMNP-TV-Z]{4}(?:-[0-9A-HJKMNP-TV-Z]{4}){3}$/,
+      )
+      replacements.push(body.id)
+    }
+
+    expect(new Set(replacements).size).toBe(4)
+    const oldRows = await env.DATABASE.prepare(
+      `SELECT id, revoked_at, is_enabled, replaced_by_code_id,
+              EXISTS(SELECT 1 FROM redemptions WHERE code_id = access_codes.id) AS used
+       FROM access_codes WHERE id IN (?, ?, ?, ?)`,
+    )
+      .bind(...originalIds)
+      .all<{
+        id: string
+        revoked_at: number | null
+        is_enabled: number
+        replaced_by_code_id: string | null
+        used: number
+      }>()
+    for (let index = 0; index < originalIds.length; index += 1) {
+      const row = oldRows.results.find(
+        (candidate) => candidate.id === originalIds[index],
+      )
+      expect(row?.replaced_by_code_id).toBe(replacements[index])
+      expect(row?.is_enabled).toBe(0)
+      expect(row?.used).toBe(index === 3 ? 1 : 0)
+      if (index === 3) expect(row?.revoked_at).toBeNull()
+      else expect(typeof row?.revoked_at).toBe('number')
+    }
+    expect(
+      await env.DATABASE.prepare(
+        'SELECT COUNT(*) AS count FROM access_codes',
+      ).first(),
+    ).toEqual({ count: 8 })
+
+    const repeated = await api(
+      `/api/admin/videos/${video.id}/codes/${originalIds[0]}/reissue`,
+      {
+        method: 'POST',
+        headers: { ...jsonHeaders, Cookie: cookie },
+        body: '{}',
+      },
+    )
+    expect(repeated.status).toBe(409)
+    expect(await repeated.json()).toEqual({ error: 'conflict' })
+  })
+
+  it('permits only one concurrent replacement for the same key', async () => {
+    const cookie = await authenticatedCookie()
+    const { video } = await (
+      await createVideo(cookie)
+    ).json<{ video: { id: string } }>()
+    const issued = await api(`/api/admin/videos/${video.id}/codes`, {
+      method: 'POST',
+      headers: { ...jsonHeaders, Cookie: cookie },
+      body: '{}',
+    })
+    const { id } = await issued.json<{ id: string }>()
+    const path = `/api/admin/videos/${video.id}/codes/${id}/reissue`
+    const [first, second] = await Promise.all([
+      api(path, {
+        method: 'POST',
+        headers: { ...jsonHeaders, Cookie: cookie },
+        body: '{}',
+      }),
+      api(path, {
+        method: 'POST',
+        headers: { ...jsonHeaders, Cookie: cookie },
+        body: '{}',
+      }),
+    ])
+
+    expect([first.status, second.status].sort()).toEqual([201, 409])
+    expect(
+      await env.DATABASE.prepare(
+        'SELECT COUNT(*) AS count FROM access_codes',
+      ).first(),
+    ).toEqual({ count: 2 })
+    expect(
+      await env.DATABASE.prepare(
+        `SELECT revoked_at IS NOT NULL AS revoked, is_enabled,
+                replaced_by_code_id IS NOT NULL AS replaced
+         FROM access_codes WHERE id = ?`,
+      )
+        .bind(id)
+        .first(),
+    ).toEqual({ revoked: 1, is_enabled: 0, replaced: 1 })
   })
 
   it('lists only redacted code metadata and revokes only codes belonging to the video', async () => {
