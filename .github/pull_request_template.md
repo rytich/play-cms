@@ -1,22 +1,34 @@
-## 関連Issue
+## Issue / Task
 
-Refs #
+- Issue: Refs #
+- Task:
+- 承認済み設計:
+- 承認済み計画:
+
+## Review range
+
+- baseRefOid:
+- headRefOid:
 
 ## 変更
 
--
+- 対象範囲:
+- 対象外:
 
 ## リスク
 
 -
 
-## 確認したシナリオ
+## 検証結果
 
 - [ ] `pnpm verify`
+- コマンドと結果:
+- 対象head:
 
-## 未確認事項
+## NO-GO / 未確認
 
-- なし
+- 承認済みNO-GO:
+- 未確認事項:
 
 ## セキュリティ確認
 
@@ -30,14 +42,25 @@ Refs #
 
 ## 独立レビュー
 
-- baseRefOid:
-- headRefOid:
+- Review round: initial / re-review
+- Finding ledger source: review ID / author / commit ID / submittedAt（initialはなし）
+- Finding ledger:
+- Late-discovery reason / reviewer-process follow-up: [記入必須。該当しない場合は「なし」と記入]
+- Operational stop: [記入必須。該当しない場合は「なし」と記入]
 - Assessment: 未実施
 - GitHub action: 未実施
 
 ## 関連文書
 
 -
+
+## 実装前の境界確認
+
+- [ ] DBの参照関係・一意性・移行時の既存データ整合を確認した、または対象外と記録した
+- [ ] 競合・外部失敗時のno-writeを確認した、または対象外と記録した
+- [ ] 外部API契約を確認済み事実とNO-GOへ分けた、または外部通信なしと記録した
+- [ ] 秘密を保存・送信・URL・ログ・応答へ出さない境界を確認した
+- [ ] navigation/authentication変更のbrowser受入を確認した、または対象外と記録した
 
 ## チェックリスト
 

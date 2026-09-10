@@ -22,7 +22,8 @@
     "test:filma:live": "node --env-file-if-exists=.dev.vars ./node_modules/vitest/vitest.mjs run --config vitest.live.config.ts",
     "test:filma:playback:live": "node --env-file-if-exists=.dev.vars ./node_modules/vitest/vitest.mjs run --config vitest.playback-live.config.ts",
     "typecheck": "tsc --noEmit",
-    "verify": "pnpm lint && pnpm typecheck && pnpm test && pnpm test:worker && pnpm build:verify && pnpm format:check"
+    "validate:reviewer-skill": "node scripts/validate-reviewer-skill.mjs",
+    "verify": "pnpm lint && pnpm typecheck && pnpm validate:reviewer-skill && pnpm test && pnpm test:worker && pnpm build:verify && pnpm format:check"
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "^1.54.4",
