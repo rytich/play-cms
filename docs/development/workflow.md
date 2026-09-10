@@ -65,10 +65,11 @@ reviewed headのrequired CI成功は有効な検証証拠です。レビュー�
 ### 修正後の再レビュー起動
 
 - 修正commitのpushは`pull_request.synchronize`を主経路として新headをレビューする。
-- 同一headを明示的に再試行するときだけ、GitHubで`knryt`へRe-request reviewし、`pull_request.review_requested`を使う。Hermesは`requested_reviewer.login == knryt`の場合だけ受け付ける。
-- `pull_request_review`と`issue_comment`はトリガーにせず、review投稿による自己再帰を防ぐ。同一delivery IDは重複排除し、別delivery IDの明示的re-requestは同じheadでも実行できる。
+- 成功済みの同一headを新たにレビューするときだけ、GitHubで`knryt`へRe-request reviewし、`pull_request.review_requested`の新しいdeliveryを使う。Hermesは`requested_reviewer.login == knryt`の場合だけ受け付ける。
+- 配信失敗から同じreview要求を回復するときは、GitHub Recent DeliveriesからRedeliverする。Redeliverは元と同じdelivery GUIDを使うため、Hermesは`failed`またはlease切れの処理だけを再取得し、成功済みまたは有効lease中の処理は重複実行しない。
+- `pull_request_review`と`issue_comment`はトリガーにせず、review投稿による自己再帰を防ぐ。
 
-Hermes実環境へのroute変更は運用者が行う。安全なテストPRで、GitHub Recent Deliveriesのdelivery ID、Hermes受信、`play-cms-github-pr-review` route一致、agent run、同一headへ拘束されたreviewを順に確認する。GitHub側のHTTP `2xx`だけではagent起動成功とみなさない。Secret、Authorization header、payload本文は記録しない。route未適用または同一head review未確認なら、再レビュー経路は未完了として[Issue #5](https://github.com/rytich/play-cms/issues/5)へ記録する。
+Hermes実環境へのroute変更は運用者が行う。delivery処理は`received`、`running`、`succeeded`、`failed`と期限付きleaseで管理し、delivery GUID、PR番号、head SHA、action、時刻、statusだけを運用記録へ残す。安全なテストPRで、GitHub Recent Deliveriesのdelivery GUID、Hermes受信、`play-cms-github-pr-review` route一致、agent run、同一headへ拘束されたreviewを順に確認する。失敗回復では同じGUIDのRedeliverが一度だけ再取得されること、明示的なRe-request reviewでは別GUIDになることも確認する。GitHub側のHTTP `2xx`だけではagent起動成功とみなさない。Secret、Authorization header、payload本文は保存・記録しない。route未適用または同一head review未確認なら、再レビュー経路は未完了として[Issue #5](https://github.com/rytich/play-cms/issues/5)へ記録する。
 
 GitHub操作フェーズでは、active identityが`knryt`であり、`knryt`資格情報が対象リポジトリへ限定されていることを確認します。review対象rangeを`baseRefOid=<reviewed-base-sha>`と`headRefOid=<reviewed-head-sha>`で記録し、Approve・Mergeの直前に両方の一致を確認します。Ready判定の場合だけ、`gh api --method POST repos/<owner>/<repo>/pulls/<pr-number>/reviews -f event=APPROVE -f commit_id=<reviewed-head-sha> -f body='<review-summary>'`でreview済みcommitへ拘束したApproveを作成します。返却された`commit_id`と現在headが一致しない場合は、可能な限り当該Approveを取り消し、新しい独立レビューを要求します。
 

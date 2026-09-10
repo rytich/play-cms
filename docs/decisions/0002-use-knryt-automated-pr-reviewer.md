@@ -25,7 +25,7 @@ Webhook payloadやPRの内容をそのままエージェントへの命令とし
 
 Webhook受信層は`X-Hub-Signature-256`を検証し、`pull_request`の`opened`、`synchronize`、`reopened`、`ready_for_review`、`review_requested`だけを受け付ける。`review_requested`は`requested_reviewer.login == knryt`の場合だけ許可し、`pull_request_review`と`issue_comment`は自己再帰を避けるためトリガーにしない。
 
-`X-GitHub-Delivery`を重複排除キーとし、repository、PR番号、head SHA、actionを監査情報に含める。同一deliveryは再実行せず、別deliveryの明示的な`review_requested`は同じheadの再レビューとして許可する。通常の修正pushは`synchronize`で起動する。受信から10秒以内に`2xx`を返してレビューは非同期に実行するが、GitHub上のHTTP成功だけで完了とはみなさない。Hermes受信、route一致、agent run、同一headに拘束されたreviewまで確認する。
+`X-GitHub-Delivery`を処理単位とする。GitHubのRedeliverは元のdelivery GUIDを再利用するため、永続的なGUID拒否にはしない。各GUIDを`received`、`running`、`succeeded`、`failed`と期限付きleaseで管理し、新規・`failed`・lease切れだけを原子的に取得する。有効lease中の`received`/`running`と`succeeded`後は重複実行しない。保存するのはdelivery GUID、PR番号、head SHA、action、時刻、status、lease期限だけとし、Webhook Secret、Authorization情報、payload本文は保存しない。通常の修正pushは`synchronize`、成功済みの同一headを新たにレビューするときは`review_requested`の別deliveryで起動する。受信から10秒以内に`2xx`を返してレビューは非同期に実行するが、GitHub上のHTTP成功だけで完了とはみなさない。Hermes受信、route一致、agent run、同一headに拘束されたreviewまで確認する。
 
 ## GitHub操作の安全条件
 
@@ -63,4 +63,5 @@ Task 8のCI・ruleset部分だけを先行導入し、実際に有効化・検�
 
 - [GitHub: Validating webhook deliveries](https://docs.github.com/en/webhooks/using-webhooks/validating-webhook-deliveries)
 - [GitHub: Best practices for using webhooks](https://docs.github.com/en/webhooks/using-webhooks/best-practices-for-using-webhooks)
+- [GitHub: Redelivering webhooks](https://docs.github.com/en/webhooks/testing-and-troubleshooting-webhooks/redelivering-webhooks)
 - [GitHub: REST API endpoints for pull request reviews](https://docs.github.com/en/rest/pulls/reviews)
