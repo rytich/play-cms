@@ -502,6 +502,8 @@ app.get('/api/admin/filma', async (c) => {
     !setting?.filma_api_key_ciphertext ||
     !setting.filma_api_key_nonce ||
     setting.filma_verified_at === null ||
+    setting.filma_organization_id === null ||
+    setting.filma_api_type === null ||
     !c.env.PLAY_ENCRYPTION_KEY
   ) {
     return c.json({ configured: false, verifiedAt: null })
@@ -545,7 +547,9 @@ app.put('/api/admin/filma', async (c) => {
     return 'response' in body ? body.response : c.json(errorBody.invalid, 400)
   }
   try {
-    await verifyFilmaTokenContract({ apiKey: body.value.apiKey })
+    const verification = await verifyFilmaTokenContract({
+      apiKey: body.value.apiKey,
+    })
     const encrypted = await encryptSecret(
       c.env.PLAY_ENCRYPTION_KEY,
       body.value.apiKey,
@@ -555,6 +559,8 @@ app.put('/api/admin/filma', async (c) => {
       !(await saveFilmaSetting(c.env.DATABASE, {
         ...encrypted,
         verifiedAt: now,
+        organizationId: verification.organizationId,
+        apiType: verification.apiType,
       }))
     ) {
       throw new Error('setting unavailable')

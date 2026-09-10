@@ -48,7 +48,7 @@ CI・rulesetの先行導入: [最小のPRガードレール](minimal-guardrails.
 5. `develop`向けPRを作り、`Refs #<番号>`を記載します。
 6. 独立レビューの結果をIssueへ反映します。Task 8でCIを導入した後は、CI結果も反映します。
 
-viewer/adminのnavigationまたはauthentication flowを変更するPRでは、承認・mergeするexact-head SHAに対して`pnpm test:browser:viewing`を実行し、成功結果とSHAをPRへ記録します。以後にソースが変わった場合は新headで再実行するまで承認・mergeしません。この合成browser受入は実Worker、D1、Filmaの検証とは区別します。
+CIの必須`verify` jobは、通常検証後に固定版Playwright用Chromiumを導入して`pnpm test:browser:viewing`を実行します。viewer/adminのnavigationまたはauthentication flowを変更するPRは、このbrowser受入を含むexact-headの必須checkが成功するまで承認・mergeしません。この合成browser受入は実Worker、D1、Filmaの検証とは区別します。
 
 ## 独立レビュー
 

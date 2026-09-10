@@ -28,7 +28,8 @@ async function resetDatabase() {
     env.DATABASE.prepare(
       `UPDATE app_settings
        SET filma_api_key_ciphertext = NULL, filma_api_key_nonce = NULL,
-           filma_verified_at = NULL WHERE id = 1`,
+           filma_verified_at = NULL, filma_organization_id = NULL,
+           filma_api_type = NULL WHERE id = 1`,
     ),
   ])
   vi.unstubAllGlobals()
@@ -157,15 +158,38 @@ describe('one-time viewing flow', () => {
     })
     expect(saved.status).toBe(200)
     const responseBody = await saved.text()
-    expect(JSON.parse(responseBody)).toMatchObject({ configured: true })
+    const parsedBody = JSON.parse(responseBody) as {
+      configured: boolean
+      verifiedAt: string | null
+    }
+    expect(parsedBody.configured).toBe(true)
+    expect(parsedBody.verifiedAt).toEqual(expect.any(String))
+    expect(Object.keys(parsedBody).sort()).toEqual(['configured', 'verifiedAt'])
+    expect(responseBody).not.toMatch(/organization|apiType|api_type/i)
     expect(responseBody).not.toContain('synthetic-filma-key')
     const stored = await env.DATABASE.prepare(
-      `SELECT filma_api_key_ciphertext, filma_api_key_nonce, filma_verified_at
+      `SELECT filma_api_key_ciphertext, filma_api_key_nonce, filma_verified_at,
+              filma_organization_id, filma_api_type
        FROM app_settings WHERE id = 1`,
     ).first<Record<string, unknown>>()
     expect(stored?.filma_api_key_ciphertext).not.toBe('synthetic-filma-key')
     expect(stored?.filma_api_key_nonce).toEqual(expect.any(String))
     expect(stored?.filma_verified_at).toEqual(expect.any(Number))
+    expect(stored?.filma_organization_id).toBe(42)
+    expect(stored?.filma_api_type).toBe('readonly')
+
+    const reloaded = await request('/api/admin/filma', { headers })
+    expect(reloaded.status).toBe(200)
+    const reloadedBody = await reloaded.json<{
+      configured: boolean
+      verifiedAt: string | null
+    }>()
+    expect(reloadedBody.configured).toBe(true)
+    expect(reloadedBody.verifiedAt).toEqual(expect.any(String))
+    expect(Object.keys(reloadedBody).sort()).toEqual([
+      'configured',
+      'verifiedAt',
+    ])
   })
 
   it('fails closed when the stored Filma key cannot be decrypted', async () => {
@@ -174,7 +198,8 @@ describe('one-time viewing flow', () => {
     await env.DATABASE.prepare(
       `UPDATE app_settings
        SET filma_api_key_ciphertext = ?, filma_api_key_nonce = ?,
-           filma_verified_at = 1 WHERE id = 1`,
+           filma_verified_at = 1, filma_organization_id = 42,
+           filma_api_type = 'readonly' WHERE id = 1`,
     )
       .bind(encrypted.ciphertext, encrypted.nonce)
       .run()

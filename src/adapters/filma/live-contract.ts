@@ -5,6 +5,7 @@ export type FilmaLiveConfig = {
 export type FilmaContractSummary = {
   status: 200
   fields: ['organization_id', 'api_type']
+  organizationId: number
   apiType: 'readonly' | 'fullaccess'
 }
 
@@ -199,6 +200,7 @@ export async function verifyFilmaTokenContract(
     return {
       status: 200,
       fields: ['organization_id', 'api_type'],
+      organizationId: record.organization_id as number,
       apiType: record.api_type,
     }
   } finally {

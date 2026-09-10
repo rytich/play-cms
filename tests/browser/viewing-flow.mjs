@@ -6,12 +6,7 @@ import { cwd, env, stdout } from 'node:process'
 import { URL } from 'node:url'
 
 const require = createRequire(import.meta.url)
-if (!env.PLAYWRIGHT_MODULE_PATH || !env.PLAYWRIGHT_CHROME_PATH) {
-  throw new Error(
-    'PLAYWRIGHT_MODULE_PATH and PLAYWRIGHT_CHROME_PATH are required',
-  )
-}
-const { chromium } = require(env.PLAYWRIGHT_MODULE_PATH)
+const { chromium } = require(env.PLAYWRIGHT_MODULE_PATH ?? 'playwright')
 const staticRoot = join(cwd(), 'dist/admin/client')
 const contentTypes = {
   '.css': 'text/css; charset=utf-8',
@@ -168,7 +163,9 @@ async function installSyntheticApi(context, state) {
 
 const browser = await chromium.launch({
   headless: true,
-  executablePath: env.PLAYWRIGHT_CHROME_PATH,
+  ...(env.PLAYWRIGHT_CHROME_PATH
+    ? { executablePath: env.PLAYWRIGHT_CHROME_PATH }
+    : {}),
 })
 
 try {

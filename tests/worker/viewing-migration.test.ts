@@ -107,5 +107,27 @@ describe('viewing flow migration', () => {
       filma_api_key_nonce: null,
       filma_verified_at: null,
     })
+
+    const identityMigration = migration('0005_')
+    expect(identityMigration).toBeDefined()
+    await applyD1Migrations(env.OLD_DATABASE, [identityMigration])
+    expect(
+      await env.OLD_DATABASE.prepare(
+        `SELECT filma_organization_id, filma_api_type
+         FROM app_settings WHERE id = 1`,
+      ).first(),
+    ).toEqual({ filma_organization_id: null, filma_api_type: null })
+    await expect(
+      env.OLD_DATABASE.prepare(
+        `UPDATE app_settings
+         SET filma_organization_id = 42, filma_api_type = 'readonly'
+         WHERE id = 1`,
+      ).run(),
+    ).resolves.toMatchObject({ success: true })
+    await expect(
+      env.OLD_DATABASE.prepare(
+        `UPDATE app_settings SET filma_api_type = 'administrator' WHERE id = 1`,
+      ).run(),
+    ).rejects.toThrow()
   })
 })

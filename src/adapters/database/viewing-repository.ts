@@ -305,27 +305,43 @@ export async function findViewerPlayback(
 export async function findFilmaSetting(db: D1Database) {
   return db
     .prepare(
-      `SELECT filma_api_key_ciphertext, filma_api_key_nonce, filma_verified_at
+      `SELECT filma_api_key_ciphertext, filma_api_key_nonce, filma_verified_at,
+              filma_organization_id, filma_api_type
        FROM app_settings WHERE id = 1`,
     )
     .first<{
       filma_api_key_ciphertext: string | null
       filma_api_key_nonce: string | null
       filma_verified_at: number | null
+      filma_organization_id: number | null
+      filma_api_type: 'readonly' | 'fullaccess' | null
     }>()
 }
 
 export async function saveFilmaSetting(
   db: D1Database,
-  input: { ciphertext: string; nonce: string; verifiedAt: number },
+  input: {
+    ciphertext: string
+    nonce: string
+    verifiedAt: number
+    organizationId: number
+    apiType: 'readonly' | 'fullaccess'
+  },
 ) {
   const result = await db
     .prepare(
       `UPDATE app_settings
        SET filma_api_key_ciphertext = ?, filma_api_key_nonce = ?,
-           filma_verified_at = ? WHERE id = 1`,
+           filma_verified_at = ?, filma_organization_id = ?,
+           filma_api_type = ? WHERE id = 1`,
     )
-    .bind(input.ciphertext, input.nonce, input.verifiedAt)
+    .bind(
+      input.ciphertext,
+      input.nonce,
+      input.verifiedAt,
+      input.organizationId,
+      input.apiType,
+    )
     .run()
   return result.meta.changes === 1
 }
