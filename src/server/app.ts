@@ -446,7 +446,9 @@ async function configuredFilmaApiKey(env: Env) {
   if (
     !setting?.filma_api_key_ciphertext ||
     !setting.filma_api_key_nonce ||
-    setting.filma_verified_at === null
+    setting.filma_verified_at === null ||
+    setting.filma_organization_id === null ||
+    setting.filma_api_type === null
   ) {
     return null
   }

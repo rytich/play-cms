@@ -41,7 +41,8 @@ async function seedAvailableVideo(codeValue = normalizedCode) {
     env.DATABASE.prepare(
       `UPDATE app_settings
        SET filma_api_key_ciphertext = ?, filma_api_key_nonce = ?,
-           filma_verified_at = 1 WHERE id = 1`,
+           filma_verified_at = 1, filma_organization_id = 42,
+           filma_api_type = 'readonly' WHERE id = 1`,
     ).bind(encrypted.ciphertext, encrypted.nonce),
     env.DATABASE.prepare(
       `INSERT INTO videos
@@ -274,6 +275,40 @@ describe('one-time viewing flow', () => {
         'SELECT COUNT(*) AS count FROM redemptions',
       ).first(),
     ).toEqual({ count: 0 })
+  })
+
+  it('does not issue a grant when the stored Filma connection identity is incomplete', async () => {
+    for (const missingField of [
+      'filma_organization_id',
+      'filma_api_type',
+    ] as const) {
+      await resetDatabase()
+      await seedAvailableVideo()
+      await env.DATABASE.prepare(
+        `UPDATE app_settings SET ${missingField} = NULL WHERE id = 1`,
+      ).run()
+      const external = grantFetch()
+      vi.stubGlobal('fetch', external)
+
+      const response = await redeem()
+
+      expect(response.status).toBe(503)
+      expect(external).not.toHaveBeenCalled()
+      expect(
+        await env.DATABASE.prepare(
+          'SELECT COUNT(*) AS count FROM redemptions',
+        ).first(),
+      ).toEqual({ count: 0 })
+      expect(
+        await env.DATABASE.prepare(
+          `SELECT revoked_at, is_enabled,
+                  EXISTS(SELECT 1 FROM redemptions WHERE code_id = access_codes.id) AS used
+           FROM access_codes WHERE id = ?`,
+        )
+          .bind(codeId)
+          .first(),
+      ).toEqual({ revoked_at: null, is_enabled: 1, used: 0 })
+    }
   })
 
   it('consumes one code once for an anonymous browser and permits only its session', async () => {
