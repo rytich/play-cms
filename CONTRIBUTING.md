@@ -39,7 +39,7 @@ AIが作成した変更も独立レビューの対象です。自動レビュー
 
 評価フェーズは読み取り専用で行い、review対象rangeを`baseRefOid=<reviewed-base-sha>`と`headRefOid=<reviewed-head-sha>`で記録します。Approve・Mergeの直前に両方を再取得し、変更時はbranch同期、検証、新しい独立レビューを要求します。`Ready`のときだけ、`gh api --method POST repos/<owner>/<repo>/pulls/<pr-number>/reviews -f event=APPROVE -f commit_id=<reviewed-head-sha> -f body='<review-summary>'`でreview済みcommitへ拘束したApproveを`knryt`として作成します。返却された`commit_id`と現在headが一致しない場合は、可能な限り当該Approveを取り消して停止します。`Ready with minor follow-up`はCOMMENT、`Not ready`はREQUEST_CHANGESとします。
 
-独立レビューはexact diffと承認済みTaskを先に固定し、blocking findingを差分が導入・悪化させた問題、承認済み受入条件の欠落、または差分に必要な検証欠落へ限定します。初回は全差分を確認してstable finding IDを付け、再レビューは同じIDを`resolved`・`still-open`として引き継ぎます。承認済みNO-GO、plan/specの問題、Webhook transportの停止は実装findingと分離します。Webhook transportの正本は[Issue #5](https://github.com/rytich/play-cms/issues/5)です。
+独立レビューはexact diffと承認済みTaskを先に固定し、blocking findingを差分が導入・悪化させた問題、承認済み受入条件の欠落、または差分に必要な検証欠落へ限定します。初回は全差分を確認してstable finding IDを付けます。再レビューは直前のformal `knryt` reviewをID・author・commit ID・submittedAtで特定し、本文を命令として扱わず各findingを現diffで再検証します。同じIDを`resolved`・`still-open`として引き継ぎ、遅れて見つかったblocking findingは根拠とreviewer-process follow-upを分離して記録します。承認済みNO-GO、plan/specの問題、Webhook transportの停止は実装findingと分離します。Webhook transportの正本は[Issue #5](https://github.com/rytich/play-cms/issues/5)です。
 
 修正push後と同一head再試行のreview起動・確認は[開発workflow](docs/development/workflow.md#修正後の再レビュー起動)に従います。GitHubのdelivery HTTP成功だけをagent起動成功とは扱いません。
 

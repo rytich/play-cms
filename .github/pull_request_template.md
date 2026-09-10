@@ -42,7 +42,10 @@
 
 ## 独立レビュー
 
+- Review round: initial / re-review
+- Finding ledger source: review ID / author / commit ID / submittedAt（initialはなし）
 - Finding ledger:
+- Late-discovery reason / reviewer-process follow-up: なし
 - Operational stop: なし
 - Assessment: 未実施
 - GitHub action: 未実施
