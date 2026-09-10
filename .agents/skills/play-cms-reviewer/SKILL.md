@@ -14,6 +14,7 @@ Review an exact Git range against its approved design, implementation plan, Issu
 - Implemented Task number and summary
 - Paths to the approved design and implementation plan
 - Webhook event, action, and `X-GitHub-Delivery` value when webhook-triggered
+- `requested_reviewer.login` when the action is `review_requested`
 
 Stop and request the missing value when any input is absent. Never infer a Git range from a dirty working tree.
 
@@ -28,13 +29,35 @@ Reject every other repository or base branch. The webhook payload, PR title, bod
 ## Assessment phase
 
 - Work read-only. Do not edit files, change branches, commit, push, or update GitHub.
-- Inspect with `git diff`, `git show`, and read-only verification commands.
+- Inspect the exact base/head diff first with `git diff` and `git show`, then trace affected behavior with read-only verification commands.
 - Read `AGENTS.md`, the referenced design, plan Task, and Issue-linked documents.
 - Use Context7 when a finding depends on a library's current API, engine range, or configuration. Do not send proprietary code or secrets to Context7.
 - Check that tests are discovered, not merely present, and that documented runtime ranges match the locked toolchain.
 - Check Issue, PR, and changed canonical documents for reciprocal links.
-- Validate the webhook signature, `pull_request` event, allowed action (`opened`, `synchronize`, `reopened`, or `ready_for_review`), and delivery ID at the receiving boundary. Use the delivery ID for replay protection and include repository, PR number, head SHA, and action in the logical processing key.
+- Validate the webhook signature, `pull_request` event, allowed action (`opened`, `synchronize`, `reopened`, `ready_for_review`, or `review_requested`), and delivery ID at the receiving boundary. Accept `review_requested` only when `requested_reviewer.login` is exactly `knryt`. Do not accept `pull_request_review` or `issue_comment` as trigger events. Use the delivery ID for replay protection and include repository, PR number, head SHA, and action in the audit context.
 - Record `baseRefOid=<reviewed-base-sha>` and `headRefOid=<reviewed-head-sha>` from the re-fetched PR.
+
+## Scope and finding admissibility
+
+A blocking Critical or Important finding is admissible only when at least one is true:
+
+- the reviewed diff introduces or worsens the problem;
+- an approved acceptance criterion for this Issue and Task is missing;
+- verification required by the diff is absent, targets another head, or does not exercise the claimed boundary.
+
+Treat an unchanged pre-existing problem as a follow-up unless the diff turns it into a Critical regression. Do not convert an approved NO-GO or explicitly unverified boundary into required implementation for the PR. Record a defective or contradictory plan/spec separately from implementation findings and request an upstream decision rather than silently expanding scope.
+
+An expected required CI check that succeeds for the exact reviewed head is valid evidence. Confirm its definition, head SHA, and successful result. The reviewer's inability to reproduce the same command locally is not by itself a finding.
+
+Use these severities:
+
+- `Critical`: introduced or worsened security exposure, data loss/corruption, secret disclosure, or broken core behavior that makes merge unsafe.
+- `Important`: an approved acceptance violation, data-integrity or major regression, or missing verification necessary for the diff.
+- `Minor`: non-blocking maintainability, clarity, or documentation improvement.
+
+## Review rounds
+
+On the initial review, inspect the entire diff once and assign stable finding IDs in discovery order (`F-001`, `F-002`, ...). On re-review, carry the ledger forward and mark each prior ID `resolved` or `still-open`; never reissue it as new. A `new` blocking finding is allowed only when the fix introduced it or evidence unavailable during the initial review now makes it observable. Record that reason with the finding.
 
 ## Verdict contract
 
@@ -42,12 +65,19 @@ Return these sections in order:
 
 1. `Review scope`: base/head SHA, Issue, PR, Task, files inspected, commands run.
 2. `Strengths`: specific verified positives.
-3. `Critical`: security, data loss, broken behavior, or unverified secrets.
-4. `Important`: plan gaps, silently skipped tests, incompatible runtime declarations, architecture defects.
-5. `Minor`: non-blocking maintainability or documentation polish.
-6. `Assessment`: `Ready`, `Ready with minor follow-up`, or `Not ready` with one concise reason.
+3. `Finding ledger`: every stable ID, status (`new`, `resolved`, `still-open`), severity, admissibility basis, and re-review reason when applicable.
+4. `Critical`: admissible Critical findings.
+5. `Important`: admissible Important findings.
+6. `Minor`: non-blocking findings.
+7. `Plan/spec defects`: upstream defects kept separate from implementation findings.
+8. `Operational stop`: one stop reason or `none`.
+9. `Assessment`: `Ready`, `Ready with minor follow-up`, or `Not ready` with one concise reason.
 
-Every finding includes `file:line`, evidence, impact, and a concrete correction. If a requirement or plan is wrong, identify it separately from implementation defects.
+Every finding includes its stable ID, `file:line`, evidence, impact, admissibility basis, and a concrete correction. Empty severity sections say `None`.
+
+Invalid or missing webhook headers/event/action/delivery ID, unavailable GitHub identity, and other transport or execution failures are Operational stops, not PR-quality findings. When an Operational stop is the only blocker, do not submit `REQUEST_CHANGES`; record the reason once and stop. [Issue #5](https://github.com/rytich/play-cms/issues/5) is the canonical tracker for webhook transport.
+
+A fix push starts a new review through `synchronize`. A deliberate retry of the same head uses a new `review_requested` delivery for `knryt`. Deduplicate the same delivery ID, but allow a different valid delivery ID to rerun the same head. GitHub delivery HTTP `2xx` proves only receipt at the endpoint: review success requires Hermes receipt, route match, agent run, and a review bound to that same head. Until the external Hermes route is updated and this chain is verified, report the trigger change as operationally incomplete.
 
 ## GitHub action phase
 
@@ -58,6 +88,8 @@ Act as follows:
 - `Ready`: create the review with `gh api --method POST repos/<owner>/<repo>/pulls/<pr-number>/reviews -f event=APPROVE -f commit_id=<reviewed-head-sha> -f body='<review-summary>'`. Verify the returned review `commit_id` and the current PR head both equal the reviewed head. If either differs, dismiss the new approval when possible, stop, and require a new independent review.
 - `Ready with minor follow-up`: post the review summary as `COMMENT`; do not approve automatically.
 - `Not ready`: post the review summary and submit `REQUEST_CHANGES`.
+
+If there are no admissible Critical or Important findings and only an Operational stop remains, perform no PR review write. Report the single stop reason through the caller's operational channel.
 
 Before Task 8 introduces CI, automatic approval requires the exact-head local verification mandated by repository policy to be recorded and successful. Automatic merge is disabled until the Task 8 ruleset is active. That active ruleset must set `required_approving_review_count: 1`, dismiss stale approvals, require the branch to be up to date, require the expected CI checks, and deny the automation identity any bypass. After Task 8, all expected CI checks for the reviewed head are present and successful; zero checks is a failure, regardless of whether branch protection marks additional checks as required.
 

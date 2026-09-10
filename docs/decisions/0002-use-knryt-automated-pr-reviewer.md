@@ -3,6 +3,7 @@
 - 状態: 採用
 - 決定日: 2026-09-03
 - Tracking: [GitHub Issue #4](https://github.com/rytich/play-cms/issues/4)
+- Webhook transport: [GitHub Issue #5](https://github.com/rytich/play-cms/issues/5)
 - 最小構成の先行導入: [Issue #12](https://github.com/rytich/play-cms/issues/12) / [Issue #13](https://github.com/rytich/play-cms/issues/13) / [Issue #14](https://github.com/rytich/play-cms/issues/14)
 
 ## 背景
@@ -22,7 +23,9 @@ Webhook payloadやPRの内容をそのままエージェントへの命令とし
 
 `Ready with minor follow-up`はCOMMENT、`Not ready`はREQUEST_CHANGESとし、自動Approve・自動Mergeしない。PR作成者が`knryt`の場合も自動操作しない。
 
-Webhook受信層は`X-Hub-Signature-256`を検証し、`pull_request`の許可actionだけを受け付ける。`X-GitHub-Delivery`を一次重複キーにし、論理処理キーにはrepository、PR番号、head SHA、actionを含める。受信から10秒以内に`2xx`を返し、レビューは非同期に実行する。
+Webhook受信層は`X-Hub-Signature-256`を検証し、`pull_request`の`opened`、`synchronize`、`reopened`、`ready_for_review`、`review_requested`だけを受け付ける。`review_requested`は`requested_reviewer.login == knryt`の場合だけ許可し、`pull_request_review`と`issue_comment`は自己再帰を避けるためトリガーにしない。
+
+`X-GitHub-Delivery`を重複排除キーとし、repository、PR番号、head SHA、actionを監査情報に含める。同一deliveryは再実行せず、別deliveryの明示的な`review_requested`は同じheadの再レビューとして許可する。通常の修正pushは`synchronize`で起動する。受信から10秒以内に`2xx`を返してレビューは非同期に実行するが、GitHub上のHTTP成功だけで完了とはみなさない。Hermes受信、route一致、agent run、同一headに拘束されたreviewまで確認する。
 
 ## GitHub操作の安全条件
 
@@ -54,6 +57,7 @@ Task 8のCI・ruleset部分だけを先行導入し、実際に有効化・検�
 - `knryt`資格情報とWebhook受信基盤の安全な運用が必要になる。
 - Task 8のrulesetが有効になるまで自動Mergeできない。
 - Webhook受信障害や端末停止時はGitHubのdelivery再送または手動レビューが必要になる。
+- Hermes実環境のrouteへ本変更を適用し、同一headレビューまで確認する作業は運用者が行う。未適用または未確認なら再レビュー経路は未完了である。
 
 ## 参考資料
 
