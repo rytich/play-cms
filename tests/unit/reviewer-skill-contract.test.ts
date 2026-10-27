@@ -6,7 +6,7 @@ import { spawnSync } from 'node:child_process'
 
 import { afterEach, describe, expect, it } from 'vitest'
 
-const skillPath = '.agents/skills/play-cms-reviewer/SKILL.md'
+const skillPath = 'docs/development/reviewer-policy.md'
 const validatorPath = join(cwd(), 'scripts/validate-reviewer-skill.mjs')
 const temporaryDirectories: string[] = []
 

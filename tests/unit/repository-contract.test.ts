@@ -10,11 +10,20 @@ const requiredFiles = [
   '.github/ISSUE_TEMPLATE/feature.yml',
   '.github/ISSUE_TEMPLATE/docs.yml',
   '.github/pull_request_template.md',
-  '.agents/skills/play-cms-reviewer/SKILL.md',
+  'docs/development/reviewer-policy.md',
   'docs/decisions/0002-use-knryt-automated-pr-reviewer.md',
 ]
 
 describe('repository contract', () => {
+  it('keeps the reviewer policy outside discoverable skills', async () => {
+    await expect(
+      access('.agents/skills/play-cms-reviewer/SKILL.md'),
+    ).rejects.toMatchObject({ code: 'ENOENT' })
+    await expect(
+      access('docs/development/reviewer-policy.md'),
+    ).resolves.toBeUndefined()
+  })
+
   it.each(requiredFiles)('contains %s', async (path) => {
     await expect(access(path)).resolves.toBeUndefined()
   })
@@ -26,7 +35,7 @@ describe('repository contract', () => {
     expect(agents).toContain('SECURITY.md')
     expect(agents).toContain('docs/development/workflow.md')
     expect(agents).toContain('pnpm verify')
-    expect(agents).toContain('.agents/skills/play-cms-reviewer/SKILL.md')
+    expect(agents).toContain('docs/development/reviewer-policy.md')
   })
 
   it('requires security simplicity evidence in every pull request', async () => {
@@ -217,7 +226,7 @@ describe('repository contract', () => {
 
   it('binds every automated merge to the exact reviewed head', async () => {
     const policyPaths = [
-      '.agents/skills/play-cms-reviewer/SKILL.md',
+      'docs/development/reviewer-policy.md',
       'CONTRIBUTING.md',
       'docs/development/workflow.md',
       'docs/superpowers/specs/2026-09-03-foundation-design.md',
@@ -232,7 +241,7 @@ describe('repository contract', () => {
 
   it('requires successful CI for the reviewed head after Task 8', async () => {
     const reviewerSkill = await readFile(
-      '.agents/skills/play-cms-reviewer/SKILL.md',
+      'docs/development/reviewer-policy.md',
       'utf8',
     )
     const japanesePolicyPaths = [
@@ -253,7 +262,7 @@ describe('repository contract', () => {
 
   it('uses one explicit merge-commit command for automated merges', async () => {
     const policyPaths = [
-      '.agents/skills/play-cms-reviewer/SKILL.md',
+      'docs/development/reviewer-policy.md',
       'CONTRIBUTING.md',
       'docs/development/workflow.md',
       'docs/superpowers/specs/2026-09-03-foundation-design.md',
@@ -270,7 +279,7 @@ describe('repository contract', () => {
 
   it('binds automated approvals to the exact reviewed commit', async () => {
     const policyPaths = [
-      '.agents/skills/play-cms-reviewer/SKILL.md',
+      'docs/development/reviewer-policy.md',
       'CONTRIBUTING.md',
       'docs/development/workflow.md',
       'docs/superpowers/specs/2026-09-03-foundation-design.md',
@@ -285,7 +294,7 @@ describe('repository contract', () => {
 
   it('preserves the exact reviewed base and head pair', async () => {
     const policyPaths = [
-      '.agents/skills/play-cms-reviewer/SKILL.md',
+      'docs/development/reviewer-policy.md',
       'CONTRIBUTING.md',
       'docs/development/workflow.md',
       'docs/superpowers/specs/2026-09-03-foundation-design.md',
@@ -301,7 +310,7 @@ describe('repository contract', () => {
 
   it('disables automated merge until the Task 8 ruleset is active', async () => {
     const reviewerSkill = await readFile(
-      '.agents/skills/play-cms-reviewer/SKILL.md',
+      'docs/development/reviewer-policy.md',
       'utf8',
     )
     const japanesePolicyPaths = [
@@ -329,7 +338,7 @@ describe('repository contract', () => {
 
   it('treats zero CI checks as a failed merge gate', async () => {
     const reviewerSkill = await readFile(
-      '.agents/skills/play-cms-reviewer/SKILL.md',
+      'docs/development/reviewer-policy.md',
       'utf8',
     )
     const japanesePolicyPaths = [
@@ -348,7 +357,7 @@ describe('repository contract', () => {
 
   it('requires at least one approving review in the Task 8 ruleset', async () => {
     const policyPaths = [
-      '.agents/skills/play-cms-reviewer/SKILL.md',
+      'docs/development/reviewer-policy.md',
       'CONTRIBUTING.md',
       'docs/development/workflow.md',
       'docs/superpowers/specs/2026-09-03-foundation-design.md',
@@ -364,7 +373,7 @@ describe('repository contract', () => {
 
   it('scopes the automated reviewer to trusted repository state', async () => {
     const reviewerSkill = await readFile(
-      '.agents/skills/play-cms-reviewer/SKILL.md',
+      'docs/development/reviewer-policy.md',
       'utf8',
     )
     const japanesePolicyPaths = [

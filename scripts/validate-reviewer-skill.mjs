@@ -268,9 +268,7 @@ function validate(source) {
   return failures
 }
 
-const skillPath = resolve(
-  argv[2] ?? '.agents/skills/play-cms-reviewer/SKILL.md',
-)
+const skillPath = resolve(argv[2] ?? 'docs/development/reviewer-policy.md')
 
 try {
   const failures = validate(await readFile(skillPath, 'utf8'))

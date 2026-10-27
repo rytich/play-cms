@@ -9,7 +9,7 @@
 5. 技術判断は`docs/decisions/`を確認する。
 6. TaskのIssueを作成してからfeatureブランチで着手する。
 7. 完了報告前に`pnpm verify`を実行し、結果をIssueとPRへ記録する。
-8. PR作成後は別エージェントに`.agents/skills/play-cms-reviewer/SKILL.md`を読ませ、独立レビューを実行する。
+8. PR作成後は別エージェントに`docs/development/reviewer-policy.md`を読ませ、独立レビューを実行する。
 9. 自動Approve・自動Mergeは`docs/decisions/0002-use-knryt-automated-pr-reviewer.md`の条件を満たす`knryt`レビューワーだけが実行する。
 10. モデルの役割分担は`docs/development/workflow.md`の「モデルと担当」に従う。6 Astraは上流工程、コード実装・テスト修正は5.6系の担当一体に集約する。
 

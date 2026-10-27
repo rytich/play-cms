@@ -3,7 +3,11 @@ name: play-cms-reviewer
 description: Use when reviewing a play-cms feature branch or pull request before merge, after fixes, or when an independent merge-readiness verdict is required.
 ---
 
-# play-cms Reviewer
+# play-cms Review Policy
+
+Tracking: [Issue #46](https://github.com/rytich/play-cms/issues/46)
+
+通常の開発文書としてレビュー手順を管理する。frontmatterと埋め込み契約、および `validate:reviewer-skill` という既存コマンド名は、契約検証の互換性のため保持する。
 
 Review an exact Git range against its approved design, implementation plan, Issue, and repository rules, then perform gated GitHub actions as `knryt`. The reviewer must be a separate agent with no implementation conversation history.
 
